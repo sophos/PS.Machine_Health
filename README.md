@@ -4,3 +4,6 @@ Please follow the PDF guide
 This script replaces the previous scripts Endpoint_Health_EDB_MSP and Endpoint_Health_Single_Tenant scripts into one script
 Alerts have also been added to the report
 The config file allows other data to be added to the report as required
+
+v2.20
+Fixed an issue when the script was run against a Sophos Central Enterprise Dashboard
