@@ -20,7 +20,7 @@
 #
 # By: Michael Curtis and Robert Prechtel
 # Date: 29/5/2020
-# Version 2.19
+# Version 2.20
 # README: This script is an unsupported solution provided by Sophos Professional Services
 
 import requests
@@ -88,7 +88,7 @@ def get_whoami():
         organization_header = "X-Tenant-ID"
     organization_id = whoami["id"]
     # The region_url is used if Sophos Central is a tenant
-    region_url = whoami['apiHosts']["dataRegion"]
+    region_url = whoami.get('apiHosts', {}).get("dataRegion", None)
     return organization_id, organization_header, organization_type, region_url
 
 def get_all_sub_estates():
