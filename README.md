@@ -7,3 +7,7 @@ The config file allows other data to be added to the report as required
 
 v2.20
 Fixed an issue when the script was run against a Sophos Central Enterprise Dashboard
+
+v2.31
+Fixed an issue where alerts could be over reported
+Added the functionality to generate a report per sub estate rather than one big report
