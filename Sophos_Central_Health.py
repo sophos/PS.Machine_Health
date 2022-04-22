@@ -111,7 +111,7 @@ list_of_high_alerts = []
 # list of medium alerts
 list_of_medium_alerts = []
 # Put the machine name here to break on this machine
-debug_machine = 'NYCmvmDRomano2'
+debug_machine = 'test'
 # Put the machine name here to break on this machine
 debug_sub_estate = 'sub estate'
 # Time the script started. Used to renew token when required
