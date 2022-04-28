@@ -20,7 +20,7 @@
 #
 # By: Michael Curtis and Robert Prechtel
 # Date: 29/5/2020
-# Version 2.31
+# Version 2.36
 # README: This script is an unsupported solution provided by Sophos Professional Services
 
 import requests
@@ -31,6 +31,7 @@ import os
 # Import datetime modules
 from datetime import date
 from datetime import datetime
+from datetime import timedelta
 # Import time to handle API request limits
 import time
 # Import getpass for Client Secret
@@ -111,7 +112,7 @@ list_of_high_alerts = []
 # list of medium alerts
 list_of_medium_alerts = []
 # Put the machine name here to break on this machine
-debug_machine = 'test'
+debug_machine = 'machine name'
 # Put the machine name here to break on this machine
 debug_sub_estate = 'sub estate'
 # Time the script started. Used to renew token when required
@@ -168,7 +169,7 @@ def get_all_sub_estates():
     total_pages = sub_estate_json["pages"]["total"]
     # Set the keys you want in the list
     sub_estate_keys = ('id', 'name', 'dataRegion')
-    while (total_pages != 0):
+    while total_pages != 0:
         # Paged URL https://api.central.sophos.com/organization/v1/tenants?page=2 add total pages in a loop
         request_sub_estates = requests.get(
             f"{'https://api.central.sophos.com/'}{organization_type}{'/v1/tenants?page='}{total_pages}",
@@ -193,7 +194,7 @@ def get_all_computers(sub_estate_token, url, sub_estate_name, alerts_url):
     # Get all Computers from sub estates
     # Add pageSize to url and the view of full
     pagesize = 500
-    url = (f"{url}{'/endpoints?pageSize='}{pagesize}{'&view=full'}")
+    url = f"{url}{'/endpoints?pageSize='}{pagesize}{'&view=full'}"
     computers_url = url
     # Loop while the page_count is not equal to 0. We have more computers to query
     page_count = 1
@@ -201,7 +202,7 @@ def get_all_computers(sub_estate_token, url, sub_estate_name, alerts_url):
     machines_in_sub_estate = 0
     # Get all the alerts from the console
     if include_alerts == 1:
-       get_all_alerts(sub_estate_token, alerts_url, sub_estate_name)
+        get_all_alerts(sub_estate_token, alerts_url, sub_estate_name)
     while page_count != 0:
         # Script Runtime
         time_since_start = time.time()
@@ -224,32 +225,32 @@ def get_all_computers(sub_estate_token, url, sub_estate_name, alerts_url):
         request_computers = requests.get(computers_url, headers=headers)
         while request_computers.status_code == 429:
             request_computers = requests.get(computers_url, headers=headers)
-            print(
-                f" -> Get_All_Computers GET (already found computers={computer_in_sub_estate_count}) result: {request_computers.status_code}")
+            print(f" -> Get_All_Computers GET (already found computers={computer_in_sub_estate_count}) "
+                  f"result: {request_computers.status_code}")
             if request_computers.status_code == 200:
                 break
             if request_computers.status_code != 429:
                 print(f" -> ERROR {request_computers.status_code} {request_computers.reason} -> ABORT")
-                error_occured = True
+                error_occurred = True
                 return
             # status_code == 429 - do retry after X seconds till max retry amount reached
             retry_counter = retry_counter + 1
             if retry_counter > retry_max:
                 print(
-                    f" -> ERROR {request_computers.status_code} {request_computers.reason} -> Maximum retries ({retry_max}) reached. -> ABORT")
-                error_occured = True
+                    f" -> ERROR {request_computers.status_code} {request_computers.reason} -> "
+                    f"Maximum retries ({retry_max}) reached. -> ABORT")
+                error_occurred = True
                 return
             print(
-                f" -> ERROR {request_computers.status_code} {request_computers.reason} -> Wait {retry_delay} seconds and do {retry_counter}. retry")
+                f" -> ERROR {request_computers.status_code} {request_computers.reason} -> "
+                f"Wait {retry_delay} seconds and do {retry_counter}. retry")
             time.sleep(retry_delay)
         if request_computers.status_code == 400:
             print(request_computers.status_code)
         if request_computers.status_code == 403:
             print(f"No access to sub estate - {sub_estate_name}. Status Code - {request_computers.status_code}")
             # Making a dictionary as we have no access to this sub estate
-            computer_dictionary = {}
-            computer_dictionary['hostname'] = 'No access'
-            computer_dictionary['Sub Estate'] = sub_estate_name
+            computer_dictionary = {'hostname': 'No access', 'Sub Estate': sub_estate_name}
             computer_list.append(computer_dictionary)
             break
         # Remove old code
@@ -307,9 +308,6 @@ def get_all_computers(sub_estate_token, url, sub_estate_name, alerts_url):
                     # Make a list of service found to make it easier to remove
                     for services in all_computers['health']['services']['serviceDetails']:
                         service_name = services['name']
-                        # if not service_name in services_list:
-                        #    services_list.append(service_name)
-                        # computer_dictionary[service_name] = services['status']
                     # Loops through each server and returns the status
                     if full_services_list == 1:
                         for services in all_computers['health']['services']['serviceDetails']:
@@ -325,18 +323,19 @@ def get_all_computers(sub_estate_token, url, sub_estate_name, alerts_url):
                     computer_dictionary['threats'] = 'investigate'
                 # Any filtering you want to do has to done above this line as it changes the health dictionary
                 computer_dictionary['health'] = computer_dictionary['health']['overall']
-            # Check to see if the key value for platform returns Mac. If so make the OS key equal the Mac version else return the platform name for Windows and Linx
+            # Check to see if the key value for platform returns Mac.
+            # If so make the OS key equal the Mac version else return the platform name for Windows and Linx
             if 'macOS' in computer_dictionary['os']['platform']:
                 computer_dictionary['os'] = str(computer_dictionary['os']['platform']) + ' ' + str(
                     computer_dictionary['os']['majorVersion']) + '.' + str(
                     computer_dictionary['os']['minorVersion']) + '.' + str(computer_dictionary['os']['build'])
             else:
                 # Add the build number if the OS is Windows and build number exists
-                # Checks the os name is returned. If not add unknowm
+                # Checks the os name is returned. If not add unknown
                 try:
                     computer_dictionary['os']['name']
-                    if 'Windows' in computer_dictionary['os']['name'] and 'build' in computer_dictionary[
-                        'os'] and windows_build_version == 1:
+                    if 'Windows' in computer_dictionary['os']['name'] and 'build' in \
+                            computer_dictionary['os'] and windows_build_version == 1:
                         computer_dictionary['windows_build'] = (computer_dictionary['os']['build'])
                     computer_dictionary['os'] = computer_dictionary['os']['name']
                 except:
@@ -350,16 +349,18 @@ def get_all_computers(sub_estate_token, url, sub_estate_name, alerts_url):
                     computer_dictionary['provider'] = all_computers['cloud']['provider']
                     computer_dictionary['instanceid'] = all_computers['cloud']['instanceId']
             except KeyError:
-                # Checks to see if the cloud servers are required for the report. If the key is missing for some reason add nothing
+                # Checks to see if the cloud servers are required for the report.
+                # If the key is missing for some reason add nothing
                 if cloud_servers == 1:
                     computer_dictionary['provider'] = ''
                     computer_dictionary['instanceid'] = ''
             # If a user is returned tidy up the value. It is checking for the key being present
             if 'associatedPerson' in computer_dictionary.keys():
                 computer_dictionary['associatedPerson'] = computer_dictionary['associatedPerson']['viaLogin']
-            # Checks to see if there is a encryption status
+            # Checks to see if there is an encryption status
             if 'encryption' in all_computers.keys():
-                # I don't think this is the best code. The encryption status is a dictionary, with a list, another dictionary, then the status
+                # I don't think this is the best code.
+                # The encryption status is a dictionary, with a list, another dictionary, then the status
                 # At present this just reports one drive. The first one in the list. 0
                 encryption_status = all_computers['encryption']['volumes']
                 # Checks to see if the volume is returned correctly. Sometimes encryption is returned with no volume
@@ -385,49 +386,32 @@ def get_all_computers(sub_estate_token, url, sub_estate_name, alerts_url):
                     computer_dictionary[product_names] = products['status']
                     product_version_name = f"v_{product_names}"
                     if products['status'] == 'installed' and versions == 1:
-                        computer_dictionary[product_version_name] = products['version']
+                        # Work around missing version
+                        if 'version' in products:
+                            computer_dictionary[product_version_name] = products['version']
             if organization_type == "tenant":
                 # Provides direct link to the machines if the Sophos Central console is a tenant
                 # Also returns the id used in the Sophos Central GUI
-                computer_dictionary['Machine_URL'], computer_dictionary['gui_id'] = make_valid_client_id(computer_dictionary['type'],
-                                                                          computer_dictionary['id'])
+                computer_dictionary['Machine_URL'], computer_dictionary['gui_id'] = \
+                    make_valid_client_id(computer_dictionary['type'],
+                                         computer_dictionary['id'])
             else:
-                computer_dictionary['Machine_URL'], computer_dictionary['gui_id'] = make_valid_client_id(computer_dictionary['type'],
-                                                                                  computer_dictionary['id'])
+                computer_dictionary['Machine_URL'], computer_dictionary['gui_id'] = \
+                    make_valid_client_id(computer_dictionary['type'],
+                                         computer_dictionary['id'])
                 # Replace the URL as not helpful for Sophos Central Enterprise Dashboard or Partner
                 computer_dictionary['Machine_URL'] = 'N/A'
-                # Adds the sub estate name to the computer dictionary only if the console is Sophos Central Enterprise Dashboard or MSP
+                # Adds the sub estate name to the computer dictionary
+                # only if the console is Sophos Central Enterprise Dashboard or MSP
                 computer_dictionary['Sub Estate'] = sub_estate_name
             # Checks if we want the MAC Address reported and the MAC Address is returned
             if mac_address == 1 and 'macAddresses' in all_computers:
                 computer_dictionary['macAddresses'] = all_computers['macAddresses']
-            # Check to see if threat health is exists and is not good. If no, go and find out why
-            if 'health' in computer_dictionary and 'good' != computer_dictionary['health'] and include_alerts == 1:
-                medium_alert_count, high_alert_count, list_of_computer_medium_alerts, list_of_computer_high_alerts = get_machine_alerts(
-                    computer_dictionary['id'], computer_dictionary['hostname'], sub_estate_name)
-                # Adding details to the report where the Alert count is zero as the Health status is not good
-                # This has been caused by a non Alert event
-                if high_alert_count == 0:
-                    # Bad, Good, Bad
-                    if 'good' != computer_dictionary['service_health']:
-                        high_alert_count += 1
-                        list_of_computer_high_alerts.append('Broken Service(s)')
-                    # Adding bad Threat to the high alert column as this is not an Alert
-                    # Bad, Bad, Good
-                    if 'bad' == computer_dictionary['threats']:
-                        high_alert_count += 1
-                        list_of_computer_high_alerts.append('Investigation Required')
-                    # Adding Bad, Good, Good to the report
-                    if 'bad' == computer_dictionary['health'] and computer_dictionary['threats'] == 'good' and \
-                            computer_dictionary['service_health'] == 'good':
-                        high_alert_count += 1
-                        list_of_computer_high_alerts.append('Investigation Required')
-                if medium_alert_count == 0:
-                    # Adding Suspicious, Good, Good to the report
-                    if 'suspicious' == computer_dictionary['health'] and computer_dictionary['threats'] == 'good' and \
-                            computer_dictionary['service_health'] == 'good':
-                        medium_alert_count += 1
-                        list_of_computer_medium_alerts.append('Investigation Required')
+            # Add the alerts to the report is the configuration file is set to 1
+            if include_alerts == 1:
+            # print(f"Add Alerts to the report")
+                medium_alert_count, high_alert_count, list_of_computer_medium_alerts, list_of_computer_high_alerts = \
+                    get_machine_alerts(computer_dictionary['id'], computer_dictionary['hostname'], sub_estate_name)
                 alert_count = 0
                 # Finds the first column for high alerts. EDB and Single console have different number of columns
                 high_alert_start_column = report_column_order.index('tamperProtectionEnabled') + 2
@@ -435,15 +419,13 @@ def get_all_computers(sub_estate_token, url, sub_estate_name, alerts_url):
                     computer_dictionary[f"high_alerts_{alert_count}"] = alert
                     # Checks to see if another alert column is needed
                     if f'high_alerts_{alert_count}' not in report_column_order:
-                        # Adds the Alert to the column order list in the right place. Starts at the column after Tamper Enabled
+                        # Adds the Alert to the column order list in the right place.
+                        # Starts at the column after Tamper Enabled
                         report_column_order.insert(high_alert_start_column + alert_count, f"high_alerts_{alert_count}")
                         # Adds the alert column name list in the right place. Starts at the column after Tamper Enabled
                         report_column_names.insert(high_alert_start_column + alert_count,
                                                    f"High Alert No. {alert_count + 1}")
                     alert_count += 1
-                    # Debug code
-                    # if len(list_of_high_alerts) > 1134:
-                    #    print(f'High Alerts - {len(list_of_high_alerts) }')
                 alert_count = 0
                 # Finds the first column for medium alerts. We don't know how many highs we will have
                 medium_alert_start_column = report_column_order.index('number_medium_alerts') + 1
@@ -459,7 +441,67 @@ def get_all_computers(sub_estate_token, url, sub_estate_name, alerts_url):
                                                    f"Medium Alert No. {alert_count + 1}")
                     alert_count += 1
                 # Adds the result of the get_machine_alerts to the computer_dictionary
-                # Making sure there are no 0 counts in the report
+                # Making sure there a count of zero is not added to the number of alerts column
+                if high_alert_count != 0:
+                    computer_dictionary['number_high_alerts'] = high_alert_count
+                if medium_alert_count != 0:
+                    computer_dictionary['number_medium_alerts'] = medium_alert_count
+                # Check Health key is present to add extra Alerts
+                # These alerts are added by this script and not by Sophos Central
+                if 'health' in computer_dictionary:
+                    # Adding details to the report where the Alert count is zero as the Health status is not good
+                    # This has been caused by Event that did not trigger an Alert
+                    if high_alert_count == 0:
+                    # Bad, Good, Bad
+                        if 'good' != computer_dictionary['service_health']:
+                             high_alert_count += 1
+                             list_of_computer_high_alerts.append('Broken Service(s)')
+                     # Adding bad Threat to the high alert column as this is not an Alert
+                     # Bad, Bad, Good
+                        if 'bad' == computer_dictionary['threats']:
+                            high_alert_count += 1
+                            list_of_computer_high_alerts.append('Investigation Required')
+                     # Adding Bad, Good, Good to the report
+                        if 'bad' == computer_dictionary['health'] and computer_dictionary['threats'] == 'good' \
+                             and computer_dictionary['service_health'] == 'good':
+                            high_alert_count += 1
+                            list_of_computer_high_alerts.append('Investigation Required')
+                    if medium_alert_count == 0:
+                     # Adding Suspicious, Good, Good to the report
+                        if 'suspicious' == computer_dictionary['health'] and computer_dictionary['threats'] == 'good' \
+                                and computer_dictionary['service_health'] == 'good':
+                         medium_alert_count += 1
+                         list_of_computer_medium_alerts.append('Investigation Required')
+                alert_count = 0
+                # Finds the first column for high alerts. EDB and Single console have different number of columns
+                high_alert_start_column = report_column_order.index('tamperProtectionEnabled') + 2
+                for alert in list_of_computer_high_alerts:
+                    computer_dictionary[f"high_alerts_{alert_count}"] = alert
+                    # Checks to see if another alert column is needed
+                    if f'high_alerts_{alert_count}' not in report_column_order:
+                         # Adds the Alert to the column order list in the right place.
+                         # Starts at the column after Tamper Enabled
+                         report_column_order.insert(high_alert_start_column + alert_count, f"high_alerts_{alert_count}")
+                         # Adds the alert column name list in the right place. Starts at the column after Tamper Enabled
+                         report_column_names.insert(high_alert_start_column + alert_count,
+                                                    f"High Alert No. {alert_count + 1}")
+                    alert_count += 1
+                alert_count = 0
+                # Finds the first column for medium alerts. We don't know how many highs we will have
+                medium_alert_start_column = report_column_order.index('number_medium_alerts') + 1
+                for alert in list_of_computer_medium_alerts:
+                    computer_dictionary[f"medium_alerts_{alert_count}"] = alert
+                    # Checks to see if another alert column is needed
+                    if f'medium_alerts_{alert_count}' not in report_column_order:
+                    # Adds the Alert to the column order list in the right place. Starts at column 17
+                        report_column_order.insert(medium_alert_start_column + alert_count,
+                                                    f"medium_alerts_{alert_count}")
+                    # Adds the alert column name list in the right place. Starts at column 17
+                        report_column_names.insert(medium_alert_start_column + alert_count,
+                                                    f"Medium Alert No. {alert_count + 1}")
+                    alert_count += 1
+                 # Adds the result of the get_machine_alerts to the computer_dictionary
+                 # Making sure there are no 0 counts in the report
                 if high_alert_count != 0:
                     computer_dictionary['number_high_alerts'] = high_alert_count
                 if medium_alert_count != 0:
@@ -481,12 +523,10 @@ def get_all_computers(sub_estate_token, url, sub_estate_name, alerts_url):
             page_count = 0
     if machines_in_sub_estate == 0:
         # Making a dictionary as no dictionary made due to no machines in the sub estate
-        computer_dictionary = {}
-        computer_dictionary['hostname'] = 'Empty sub estate'
-        computer_dictionary['Sub Estate'] = sub_estate_name
+        computer_dictionary = {'hostname': 'Empty sub estate', 'Sub Estate': sub_estate_name}
         computer_list.append(computer_dictionary)
     print(f'Checked sub estate - {sub_estate_name}. Machines in sub estate {machines_in_sub_estate}')
-    return (machines_in_sub_estate)
+    return machines_in_sub_estate
 
 
 def get_days_since_last_seen(report_date):
@@ -520,7 +560,7 @@ def make_valid_client_id(os, machine_id):
         machine_url = endpoint_url + new_machine_id
     else:
         machine_url = server_url + new_machine_id
-    return (machine_url, new_machine_id)
+    return machine_url, new_machine_id
 
 
 def read_config():
@@ -548,7 +588,7 @@ def read_config():
         else:
             report_file_path = report_file_path + "/"
     return (client_id, client_secret, report_name, report_file_path, mac_address, versions, windows_build_version,
-            cloud_servers, exclude_alerts, full_services_list,split_edb_reports,include_sse_id)
+            cloud_servers, exclude_alerts, full_services_list, split_edb_reports, include_sse_id)
 
 
 def report_field_names():
@@ -744,7 +784,7 @@ def report_field_names():
                            'gui_id',
                            'id',
                            ]
-    return (report_column_names, report_column_order)
+    return report_column_names, report_column_order
 
 
 def get_machine_alerts(computer_id, hostname, sub_estate_name):
@@ -769,7 +809,9 @@ def get_machine_alerts(computer_id, hostname, sub_estate_name):
         if machine_id['managedAgent'] == computer_id:
             high_alert_count += 1
             list_of_computer_high_alerts.append(machine_id['description'])
-    print(f'Finding alerts for machine:{hostname} - {computer_id} in {sub_estate_name}. High Alerts Found -  {high_alert_count}. Medium Alerts Found -  {medium_alert_count}')
+    print(
+        f'Finding alerts for machine:{hostname} - {computer_id} in {sub_estate_name}. High Alerts Found -  '
+        f'{high_alert_count}. Medium Alerts Found -  {medium_alert_count}')
     # This line allows you to debug on a certain computer. Add computer name
     if hostname == debug_machine:
         print(f'Put breakpoint here - Debug Machine - {debug_machine}')
@@ -828,7 +870,9 @@ def get_all_alerts(tenant_token, url, sub_estate_name):
                 else:
                     alerts_dictionary['managedAgent'] = 'Console'
                 list_of_medium_alerts.append(alerts_dictionary)
-                print(f"Alert found for machine {alerts['description']}. Type - {alerts['category']}. Alert date - {alerts['raisedAt']}.")
+                print(
+                    f"Alert found for machine {alerts['description']}. "
+                    f"Type - {alerts['category']}. Alert date - {alerts['raisedAt']}.")
         if 'nextKey' in alerts_json['pages']:
             next_page = alerts_json['pages']['nextKey']
             # Change URL to get the next page of computers
@@ -843,8 +887,9 @@ def get_all_alerts(tenant_token, url, sub_estate_name):
     # Debug - Put the sub estate name you want to debug in the line below
     if sub_estate_name == debug_sub_estate:
         print(f'Put breakpoint here - sub estate - {sub_estate_name}')
-    print(f"Alerts found in {sub_estate_name}. High - {len(list_of_high_alerts)}. Medium - {len(list_of_medium_alerts)}")
-    return (list_of_medium_alerts, list_of_high_alerts)
+    print(
+        f"Alerts found in {sub_estate_name}. High - {len(list_of_high_alerts)}. Medium - {len(list_of_medium_alerts)}")
+    return list_of_medium_alerts, list_of_high_alerts
 
 
 def print_report():
@@ -888,6 +933,8 @@ def print_report():
         report_column_order.remove('Sub Estate')
     with open(full_report_path, 'w') as f:
         writer = csv.writer(f)
+        writer.writerow(['High alerts found', len(list_of_high_alerts)])
+        writer.writerow(['Medium alerts found', len(list_of_medium_alerts)])
         writer.writerow(report_column_names)
     # Sets the column order
     with open(full_report_path, 'a+', encoding='utf-8', newline='') as output_file:
@@ -895,7 +942,8 @@ def print_report():
         dict_writer.writerows(computer_list)
 
 
-client_id, client_secret, report_name, report_file_path, mac_address, versions, windows_build_version, cloud_servers, include_alerts, full_services_list, split_edb_reports, include_sse_id = read_config()
+client_id, client_secret, report_name, report_file_path, mac_address, versions, windows_build_version, cloud_servers, \
+    include_alerts, full_services_list, split_edb_reports, include_sse_id = read_config()
 token_url = 'https://id.sophos.com/api/v2/oauth2/token'
 headers = get_bearer_token(client_id, client_secret, token_url)
 organization_id, organization_header, organization_type, region_url = get_whoami()
@@ -905,14 +953,16 @@ if organization_type != "tenant":
     print(f"Sophos Central is a {organization_type}")
     get_all_sub_estates()
     # fieldnames, order, versions = report_field_names()
-    for sub_etates_in_list in range(len(sub_estate_list)):
-        sub_estate = sub_estate_list[sub_etates_in_list]
+    for sub_estates_in_list in range(len(sub_estate_list)):
+        sub_estate = sub_estate_list[sub_estates_in_list]
         # Debug - If you want to test one particular sub estate put the ID in the line below and uncomment the line
         # sub_estate['id'] = ''
         total_machines = get_all_computers(sub_estate['id'],
-                                           f"{'https://api-'}{sub_estate['dataRegion']}{'.central.sophos.com/endpoint/v1'}",
+                                           f"{'https://api-'}{sub_estate['dataRegion']}"
+                                           f"{'.central.sophos.com/endpoint/v1'}",
                                            sub_estate['name'],
-                                           f"{'https://api-'}{sub_estate['dataRegion']}{'.central.sophos.com/common/v1/alerts?pageSize=100'}"
+                                           f"{'https://api-'}{sub_estate['dataRegion']}"
+                                           f"{'.central.sophos.com/common/v1/alerts?pageSize=100'}"
                                            )
         all_machines_count += total_machines
         if split_edb_reports == 1:
@@ -944,3 +994,6 @@ else:
     all_machines_count += total_machines
     print(f"Total Number Of Machines: {all_machines_count}")
     print_report()
+time_since_start = time.time()
+# res = timedelta(seconds=time_since_start - start_time)
+print(f"Script run time - {timedelta(seconds=time_since_start - start_time)}")
