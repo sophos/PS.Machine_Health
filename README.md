@@ -11,3 +11,7 @@ Fixed an issue when the script was run against a Sophos Central Enterprise Dashb
 v2.31
 Fixed an issue where alerts could be over reported
 Added the functionality to generate a report per sub estate rather than one big report
+
+v2.36
+Added a timer to report how long the report takes
+Fixed an issue where some alerts could be missed
