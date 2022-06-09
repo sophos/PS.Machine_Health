@@ -15,3 +15,7 @@ Added the functionality to generate a report per sub estate rather than one big 
 v2.36
 Added a timer to report how long the report takes
 Fixed an issue where some alerts could be missed
+
+v2.40
+Fixed an issue where you could see an XDR or item error
+Added the option to add the sub estate ID to the report
