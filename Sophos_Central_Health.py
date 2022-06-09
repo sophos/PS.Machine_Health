@@ -20,7 +20,7 @@
 #
 # By: Michael Curtis and Robert Prechtel
 # Date: 29/5/2020
-# Version 2.36
+# Version 2.40
 # README: This script is an unsupported solution provided by Sophos Professional Services
 
 import requests
@@ -73,6 +73,7 @@ services_list = ['Sophos AutoUpdate Service',
                  'Sophos Safestore',
                  'Sophos System Protection Service',
                  'Sophos Lockdown Service',
+                 'Sophos NetFilter',
                  'Sophos Web Control Service',
                  'Sophos Web Intelligence Filter Service',
                  'Sophos Web Intelligence Service',
@@ -112,7 +113,7 @@ list_of_high_alerts = []
 # list of medium alerts
 list_of_medium_alerts = []
 # Put the machine name here to break on this machine
-debug_machine = 'machine name'
+debug_machine = 'put debug machine here'
 # Put the machine name here to break on this machine
 debug_sub_estate = 'sub estate'
 # Time the script started. Used to renew token when required
@@ -506,6 +507,8 @@ def get_all_computers(sub_estate_token, url, sub_estate_name, alerts_url):
                     computer_dictionary['number_high_alerts'] = high_alert_count
                 if medium_alert_count != 0:
                     computer_dictionary['number_medium_alerts'] = medium_alert_count
+                if include_sse_id == 1:
+                    computer_dictionary['Sub EstateID'] = sub_estate_token
             computer_list.append(computer_dictionary)
         # Check to see if you have more than one page of machines by checking if nextKey exists
         # We need to check if we need to page through lots of computers
@@ -525,6 +528,8 @@ def get_all_computers(sub_estate_token, url, sub_estate_name, alerts_url):
         # Making a dictionary as no dictionary made due to no machines in the sub estate
         computer_dictionary = {'hostname': 'Empty sub estate', 'Sub Estate': sub_estate_name}
         computer_list.append(computer_dictionary)
+    if include_sse_id == 1:
+        computer_dictionary['Sub EstateID'] = sub_estate_token
     print(f'Checked sub estate - {sub_estate_name}. Machines in sub estate {machines_in_sub_estate}')
     return machines_in_sub_estate
 
@@ -594,6 +599,7 @@ def read_config():
 def report_field_names():
     report_column_names = ['Machine URL',
                            'Sub Estate',
+                           'Sub EstateID',
                            'Hostname',
                            'Type',
                            'Cloud Provider',
@@ -633,6 +639,7 @@ def report_field_names():
                            'Sophos Safestore',
                            'Sophos System Protection Service',
                            'Sophos Lockdown Service',
+                           'Sophos NetFilter',
                            'Sophos Web Control Service',
                            'Sophos Web Intelligence Filter Service',
                            'Sophos Web Intelligence Service',
@@ -682,6 +689,8 @@ def report_field_names():
                            'Device Encryption Version',
                            'MTR',
                            'MTR Version',
+                           'XDR',
+                           'XDR Version',
                            'IP Addresses',
                            'Mac Addresses',
                            'Last User',
@@ -690,6 +699,7 @@ def report_field_names():
                            ]
     report_column_order = ['Machine_URL',
                            'Sub Estate',
+                           'Sub EstateID',
                            'hostname',
                            'type',
                            'provider',
@@ -729,6 +739,7 @@ def report_field_names():
                            'Sophos Safestore',
                            'Sophos System Protection Service',
                            'Sophos Lockdown Service',
+                           'Sophos NetFilter',
                            'Sophos Web Control Service',
                            'Sophos Web Intelligence Filter Service',
                            'Sophos Web Intelligence Service',
@@ -778,6 +789,8 @@ def report_field_names():
                            'v_deviceEncryption',
                            'mtr',
                            'v_mtr',
+                           'xdr',
+                           'v_xdr',
                            'ipv4Addresses',
                            'macAddresses',
                            'associatedPerson',
@@ -904,11 +917,13 @@ def print_report():
         report_column_names.remove('Core Agent Version')
         report_column_names.remove('Device Encryption Version')
         report_column_names.remove('MTR Version')
+        report_column_names.remove('XDR Version')
         report_column_order.remove('v_interceptX')
         report_column_order.remove('v_endpointProtection')
         report_column_order.remove('v_coreAgent')
         report_column_order.remove('v_deviceEncryption')
         report_column_order.remove('v_mtr')
+        report_column_order.remove('v_xdr')
     if windows_build_version == 0:
         report_column_names.remove('Windows Build')
         report_column_order.remove('windows_build')
@@ -931,6 +946,9 @@ def print_report():
         # Removes sub estate name from report if the console is a single tenant
         report_column_names.remove('Sub Estate')
         report_column_order.remove('Sub Estate')
+    if include_sse_id == 0:
+        report_column_names.remove('Sub EstateID')
+        report_column_order.remove('Sub EstateID')
     with open(full_report_path, 'w') as f:
         writer = csv.writer(f)
         writer.writerow(['High alerts found', len(list_of_high_alerts)])
