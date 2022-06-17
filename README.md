@@ -19,3 +19,6 @@ Fixed an issue where some alerts could be missed
 v2.40
 Fixed an issue where you could see an XDR or item error
 Added the option to add the sub estate ID to the report
+
+v2.41
+Fixed an issue where under some circumstances Alerts would get a 403 error
