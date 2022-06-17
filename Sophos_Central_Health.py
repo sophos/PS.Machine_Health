@@ -20,7 +20,7 @@
 #
 # By: Michael Curtis and Robert Prechtel
 # Date: 29/5/2020
-# Version 2.40
+# Version 2.41
 # README: This script is an unsupported solution provided by Sophos Professional Services
 
 import requests
@@ -254,10 +254,6 @@ def get_all_computers(sub_estate_token, url, sub_estate_name, alerts_url):
             computer_dictionary = {'hostname': 'No access', 'Sub Estate': sub_estate_name}
             computer_list.append(computer_dictionary)
             break
-        # Remove old code
-        # Get all the alerts from the console
-        # if include_alerts == 1:
-        #   get_all_alerts(sub_estate_token, alerts_url, sub_estate_name)
         # Convert to JSON
         computers_json = request_computers.json()
         # Set the keys you want in the list
@@ -507,8 +503,8 @@ def get_all_computers(sub_estate_token, url, sub_estate_name, alerts_url):
                     computer_dictionary['number_high_alerts'] = high_alert_count
                 if medium_alert_count != 0:
                     computer_dictionary['number_medium_alerts'] = medium_alert_count
-                if include_sse_id == 1:
-                    computer_dictionary['Sub EstateID'] = sub_estate_token
+            if include_sse_id == 1:
+                computer_dictionary['Sub EstateID'] = sub_estate_token
             computer_list.append(computer_dictionary)
         # Check to see if you have more than one page of machines by checking if nextKey exists
         # We need to check if we need to page through lots of computers
@@ -528,8 +524,9 @@ def get_all_computers(sub_estate_token, url, sub_estate_name, alerts_url):
         # Making a dictionary as no dictionary made due to no machines in the sub estate
         computer_dictionary = {'hostname': 'Empty sub estate', 'Sub Estate': sub_estate_name}
         computer_list.append(computer_dictionary)
-    if include_sse_id == 1:
-        computer_dictionary['Sub EstateID'] = sub_estate_token
+    #Remove old code
+    #if include_sse_id == 1:
+    #    computer_dictionary['Sub EstateID'] = sub_estate_token
     print(f'Checked sub estate - {sub_estate_name}. Machines in sub estate {machines_in_sub_estate}')
     return machines_in_sub_estate
 
@@ -807,8 +804,6 @@ def get_machine_alerts(computer_id, hostname, sub_estate_name):
     # This line allows you to debug on a certain computer. Add the debug machine at the top
     if hostname == debug_machine:
         print(f'Put breakpoint here - Debug Machine - {hostname}')
-    # Remove code
-    # print(f'Finding alerts for machine:{hostname} - {computer_id}')
     # Sets the alert count to zero
     medium_alert_count = 0
     high_alert_count = 0
@@ -984,6 +979,10 @@ if organization_type != "tenant":
                                            )
         all_machines_count += total_machines
         if split_edb_reports == 1:
+            #Check Sub Estate does not have an / in the name
+            if "/" in sub_estate['name']:
+                sub_estate['name'] = sub_estate['name'].replace("/", "-")
+                print(sub_estate['name'])
             # Change the report name to the sub estate name
             report_name = f"{sub_estate['name']}{'_'}"
             print(f"Printing sub estate - {report_name}")
