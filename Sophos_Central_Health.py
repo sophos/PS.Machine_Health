@@ -20,7 +20,7 @@
 #
 # By: Michael Curtis and Robert Prechtel
 # Date: 29/5/2020
-# Version 2.41
+# Version 2.46
 # README: This script is an unsupported solution provided by Sophos Professional Services
 
 import requests
@@ -82,8 +82,6 @@ services_list = ['Sophos AutoUpdate Service',
                  # Mac service list
                  'SophosHeartbeatD',
                  'SophosDeviceControlD',
-                 'SophosMcsAgentD',
-                 'SophosWebIntelligence',
                  'SophosLiveQuery',
                  'SophosEncryptionCentralAdapter',
                  'SophosScanD',
@@ -96,6 +94,8 @@ services_list = ['Sophos AutoUpdate Service',
                  'Sophos Network Extension',
                  'SophosAutoUpdate',
                  'SophosSXLD',
+                 'SophosMcsAgentD',
+                 'SophosWebIntelligence',
                  'SophosEncryptionD',
                  'SophosMDR',
                  'SophosEventMonitorLegacy',
@@ -115,10 +115,21 @@ list_of_medium_alerts = []
 # Put the machine name here to break on this machine
 debug_machine = 'put debug machine here'
 # Put the machine name here to break on this machine
-debug_sub_estate = 'sub estate'
+debug_sub_estate = 'put debug sub estate here'
 # Time the script started. Used to renew token when required
 start_time = time.time()
+script_start_time = time.time()
 
+class bcolours:
+    HEADER = '\033[95m'
+    OKBLUE = '\033[94m'
+    OKCYAN = '\033[96m'
+    OKGREEN = '\033[92m'
+    WARNING = '\033[93m'
+    FAIL = '\033[91m'
+    ENDC = '\033[0m'
+    BOLD = '\033[1m'
+    UNDERLINE = '\033[4m'
 
 # Get Access Token - JWT in the documentation
 def get_bearer_token(client, secret, url):
@@ -169,7 +180,7 @@ def get_all_sub_estates():
     # Find the number of pages we will need to search to get all the sub estates
     total_pages = sub_estate_json["pages"]["total"]
     # Set the keys you want in the list
-    sub_estate_keys = ('id', 'name', 'dataRegion')
+    sub_estate_keys = ('id', 'name', 'dataRegion', 'showAs')
     while total_pages != 0:
         # Paged URL https://api.central.sophos.com/organization/v1/tenants?page=2 add total pages in a loop
         request_sub_estates = requests.get(
@@ -181,7 +192,7 @@ def get_all_sub_estates():
             # Make a temporary Dictionary to be added to the sub estate list
             sub_estate_dictionary = {key: value for key, value in all_sub_estates.items() if key in sub_estate_keys}
             sub_estate_list.append(sub_estate_dictionary)
-            print(f"Sub Estate - {sub_estate_dictionary['name']}. Sub Estate ID - {sub_estate_dictionary['id']}")
+            print(f"Sub Estate - {sub_estate_dictionary['showAs']}. Sub Estate ID - {sub_estate_dictionary['id']}")
         total_pages -= 1
     # Remove X-Organization-ID from headers dictionary. We don't need this anymore
     del headers[organization_header]
@@ -503,9 +514,17 @@ def get_all_computers(sub_estate_token, url, sub_estate_name, alerts_url):
                     computer_dictionary['number_high_alerts'] = high_alert_count
                 if medium_alert_count != 0:
                     computer_dictionary['number_medium_alerts'] = medium_alert_count
-            if include_sse_id == 1:
-                computer_dictionary['Sub EstateID'] = sub_estate_token
-            computer_list.append(computer_dictionary)
+                if include_sse_id == 1:
+                    computer_dictionary['Sub EstateID'] = sub_estate_token
+            # Add all machines
+            if list_machines_with_issues_only == 0:
+                computer_list.append(computer_dictionary)
+            # Add machine if health is not good and listing only broken machine
+            elif 'health' in computer_dictionary and computer_dictionary['health'] != 'good':
+                computer_list.append(computer_dictionary)
+            # Adding machines with no health and listing only broken machines
+            elif 'health' not in computer_dictionary:
+                computer_list.append(computer_dictionary)
         # Check to see if you have more than one page of machines by checking if nextKey exists
         # We need to check if we need to page through lots of computers
         if 'nextKey' in computers_json['pages']:
@@ -524,9 +543,6 @@ def get_all_computers(sub_estate_token, url, sub_estate_name, alerts_url):
         # Making a dictionary as no dictionary made due to no machines in the sub estate
         computer_dictionary = {'hostname': 'Empty sub estate', 'Sub Estate': sub_estate_name}
         computer_list.append(computer_dictionary)
-    #Remove old code
-    #if include_sse_id == 1:
-    #    computer_dictionary['Sub EstateID'] = sub_estate_token
     print(f'Checked sub estate - {sub_estate_name}. Machines in sub estate {machines_in_sub_estate}')
     return machines_in_sub_estate
 
@@ -581,8 +597,9 @@ def read_config():
     cloud_servers = config.getint('EXTRA_FIELDS', 'Cloud_Servers')
     exclude_alerts = config.getint('EXTRA_FIELDS', 'Include_Alerts')
     full_services_list = config.getint('EXTRA_FIELDS', 'Full_Services_List')
-    split_edb_reports = config.getint('EXTRA_FIELDS', 'SplitEDBReports')
-    include_sse_id = config.getint('EXTRA_FIELDS', 'IncludeSubEstateID')
+    split_edb_reports = config.getint('EXTRA_FIELDS', 'Split_EDB_Reports')
+    include_sse_id = config.getint('EXTRA_FIELDS', 'Include_Sub_EstateID')
+    list_machines_with_issues_only = config.getint('EXTRA_FIELDS', 'List_Machines_With_Issues_Only')
     # Checks if the last character of the file path contains a \ or / if not add one
     if report_file_path[-1].isalpha():
         if os.name != "posix":
@@ -590,7 +607,7 @@ def read_config():
         else:
             report_file_path = report_file_path + "/"
     return (client_id, client_secret, report_name, report_file_path, mac_address, versions, windows_build_version,
-            cloud_servers, exclude_alerts, full_services_list, split_edb_reports, include_sse_id)
+            cloud_servers, exclude_alerts, full_services_list, split_edb_reports, include_sse_id, list_machines_with_issues_only)
 
 
 def report_field_names():
@@ -612,6 +629,17 @@ def report_field_names():
                            # PC service list
                            'Sophos AutoUpdate Service',
                            'HitmanPro.Alert service',
+                           'Sophos Endpoint Defense',
+                           'Sophos Endpoint Defense Service',
+                           'Sophos File Scanner',
+                           'Sophos File Scanner Service',
+                           'Sophos IPS',
+                           'Sophos MCS Agent',
+                           'Sophos MCS Client',
+                           'Sophos Network Threat Protection',
+                           'Sophos System Protection Service',
+                           'Sophos NetFilter',
+                           'Sophos EDR Agent',
                            'HitmanPro Alert service',
                            'Sophos Anti-Virus',
                            'Sophos Anti-Virus Status Reporter',
@@ -619,24 +647,24 @@ def report_field_names():
                            'Sophos Clean',
                            'Sophos Device Control Service',
                            'Sophos Device Encryption Service',
-                           'Sophos EDR Agent',
-                           'Sophos Endpoint Defense',
-                           'Sophos Endpoint Defense Service',
+                           # 'Sophos EDR Agent',
+                           # 'Sophos Endpoint Defense',
+                           # 'Sophos Endpoint Defense Service',
                            'Sophos File Integrity Monitoring',
-                           'Sophos File Scanner',
-                           'Sophos File Scanner Service',
-                           'Sophos IPS',
+                           # 'Sophos File Scanner',
+                           # 'Sophos File Scanner Service',
+                           # 'Sophos IPS',
                            'Sophos Snort',
                            'File Detection',
-                           'Sophos MCS Agent',
-                           'Sophos MCS Client',
+                           # 'Sophos MCS Agent',
+                           # 'Sophos MCS Client',
                            'Sophos Heartbeat',
-                           'Sophos Network Threat Protection',
+                           # 'Sophos Network Threat Protection',
                            'Sophos Safestore Service',
                            'Sophos Safestore',
-                           'Sophos System Protection Service',
+                           # 'Sophos System Protection Service',
                            'Sophos Lockdown Service',
-                           'Sophos NetFilter',
+                           # 'Sophos NetFilter',
                            'Sophos Web Control Service',
                            'Sophos Web Intelligence Filter Service',
                            'Sophos Web Intelligence Service',
@@ -645,8 +673,6 @@ def report_field_names():
                            # Mac service list
                            'SophosHeartbeatD',
                            'SophosDeviceControlD',
-                           'SophosMcsAgentD',
-                           'SophosWebIntelligence',
                            'SophosLiveQuery',
                            'SophosEncryptionCentralAdapter',
                            'SophosScanD',
@@ -659,6 +685,8 @@ def report_field_names():
                            'Sophos Network Extension',
                            'SophosAutoUpdate',
                            'SophosSXLD',
+                           'SophosMcsAgentD',
+                           'SophosWebIntelligence',
                            'SophosEncryptionD',
                            'SophosMDR',
                            'SophosEventMonitorLegacy',
@@ -712,6 +740,17 @@ def report_field_names():
                            # PC service list
                            'Sophos AutoUpdate Service',
                            'HitmanPro.Alert service',
+                           'Sophos Endpoint Defense',
+                           'Sophos Endpoint Defense Service',
+                           'Sophos File Scanner',
+                           'Sophos File Scanner Service',
+                           'Sophos IPS',
+                           'Sophos MCS Agent',
+                           'Sophos MCS Client',
+                           'Sophos Network Threat Protection',
+                           'Sophos System Protection Service',
+                           'Sophos NetFilter',
+                           'Sophos EDR Agent',
                            'HitmanPro Alert service',
                            'Sophos Anti-Virus',
                            'Sophos Anti-Virus Status Reporter',
@@ -719,24 +758,24 @@ def report_field_names():
                            'Sophos Clean',
                            'Sophos Device Control Service',
                            'Sophos Device Encryption Service',
-                           'Sophos EDR Agent',
-                           'Sophos Endpoint Defense',
-                           'Sophos Endpoint Defense Service',
+                           # 'Sophos EDR Agent',
+                           # 'Sophos Endpoint Defense',
+                           # 'Sophos Endpoint Defense Service',
                            'Sophos File Integrity Monitoring',
-                           'Sophos File Scanner',
-                           'Sophos File Scanner Service',
-                           'Sophos IPS',
+                           # 'Sophos File Scanner',
+                           #'Sophos File Scanner Service',
+                           # 'Sophos IPS',
                            'Sophos Snort',
                            'File Detection',
-                           'Sophos MCS Agent',
-                           'Sophos MCS Client',
+                           # 'Sophos MCS Agent',
+                           # 'Sophos MCS Client',
                            'Sophos Heartbeat',
-                           'Sophos Network Threat Protection',
+                           # 'Sophos Network Threat Protection',
                            'Sophos Safestore Service',
                            'Sophos Safestore',
-                           'Sophos System Protection Service',
+                           # 'Sophos System Protection Service',
                            'Sophos Lockdown Service',
-                           'Sophos NetFilter',
+                           # 'Sophos NetFilter',
                            'Sophos Web Control Service',
                            'Sophos Web Intelligence Filter Service',
                            'Sophos Web Intelligence Service',
@@ -745,8 +784,6 @@ def report_field_names():
                            # Mac service list
                            'SophosHeartbeatD',
                            'SophosDeviceControlD',
-                           'SophosMcsAgentD',
-                           'SophosWebIntelligence',
                            'SophosLiveQuery',
                            'SophosEncryptionCentralAdapter',
                            'SophosScanD',
@@ -759,6 +796,8 @@ def report_field_names():
                            'Sophos Network Extension',
                            'SophosAutoUpdate',
                            'SophosSXLD',
+                           'SophosMcsAgentD',
+                           'SophosWebIntelligence',
                            'SophosEncryptionD',
                            'SophosMDR',
                            'SophosEventMonitorLegacy',
@@ -817,7 +856,12 @@ def get_machine_alerts(computer_id, hostname, sub_estate_name):
         if machine_id['managedAgent'] == computer_id:
             high_alert_count += 1
             list_of_computer_high_alerts.append(machine_id['description'])
-    print(
+    if medium_alert_count != 0 or high_alert_count !=0:
+        print(
+            f'Finding alerts for machine:{bcolours.OKGREEN}{hostname}{bcolours.ENDC} - {computer_id} in {bcolours.OKBLUE}{sub_estate_name}. {bcolours.FAIL}High Alerts Found -  '
+            f'{high_alert_count}. {bcolours.WARNING}Medium Alerts Found -  {medium_alert_count}{bcolours.ENDC}')
+    else:
+        print(
         f'Finding alerts for machine:{hostname} - {computer_id} in {sub_estate_name}. High Alerts Found -  '
         f'{high_alert_count}. Medium Alerts Found -  {medium_alert_count}')
     # This line allows you to debug on a certain computer. Add computer name
@@ -856,6 +900,8 @@ def get_all_alerts(tenant_token, url, sub_estate_name):
         request_computers = requests.get(alert_search_url, headers=headers)
         # Convert to JSON
         alerts_json = request_computers.json()
+        if request_computers.status_code == 403:
+            break
         # Debug - Put the sub estate name you want to debug in the line below
         if sub_estate_name == debug_sub_estate:
             print(f'Put breakpoint here - sub estate - {sub_estate_name}')
@@ -879,8 +925,8 @@ def get_all_alerts(tenant_token, url, sub_estate_name):
                     alerts_dictionary['managedAgent'] = 'Console'
                 list_of_medium_alerts.append(alerts_dictionary)
                 print(
-                    f"Alert found for machine {alerts['description']}. "
-                    f"Type - {alerts['category']}. Alert date - {alerts['raisedAt']}.")
+                    f"Alert {bcolours.FAIL}{alerts['description']}{bcolours.ENDC} found. Event type - {bcolours.FAIL}{alerts['type']}{bcolours.ENDC}."
+                    f"Type - {bcolours.FAIL}{alerts['category']}{bcolours.ENDC}. Alert date - {bcolours.OKBLUE}{alerts['raisedAt']}{bcolours.ENDC}.")
         if 'nextKey' in alerts_json['pages']:
             next_page = alerts_json['pages']['nextKey']
             # Change URL to get the next page of computers
@@ -944,7 +990,7 @@ def print_report():
     if include_sse_id == 0:
         report_column_names.remove('Sub EstateID')
         report_column_order.remove('Sub EstateID')
-    with open(full_report_path, 'w') as f:
+    with open(full_report_path, 'w',encoding='utf-8') as f:
         writer = csv.writer(f)
         writer.writerow(['High alerts found', len(list_of_high_alerts)])
         writer.writerow(['Medium alerts found', len(list_of_medium_alerts)])
@@ -956,7 +1002,7 @@ def print_report():
 
 
 client_id, client_secret, report_name, report_file_path, mac_address, versions, windows_build_version, cloud_servers, \
-    include_alerts, full_services_list, split_edb_reports, include_sse_id = read_config()
+    include_alerts, full_services_list, split_edb_reports, include_sse_id, list_machines_with_issues_only = read_config()
 token_url = 'https://id.sophos.com/api/v2/oauth2/token'
 headers = get_bearer_token(client_id, client_secret, token_url)
 organization_id, organization_header, organization_type, region_url = get_whoami()
@@ -973,18 +1019,18 @@ if organization_type != "tenant":
         total_machines = get_all_computers(sub_estate['id'],
                                            f"{'https://api-'}{sub_estate['dataRegion']}"
                                            f"{'.central.sophos.com/endpoint/v1'}",
-                                           sub_estate['name'],
+                                           sub_estate['showAs'],
                                            f"{'https://api-'}{sub_estate['dataRegion']}"
                                            f"{'.central.sophos.com/common/v1/alerts?pageSize=100'}"
                                            )
         all_machines_count += total_machines
         if split_edb_reports == 1:
             #Check Sub Estate does not have an / in the name
-            if "/" in sub_estate['name']:
-                sub_estate['name'] = sub_estate['name'].replace("/", "-")
-                print(sub_estate['name'])
+            if "/" in sub_estate['showAs']:
+                sub_estate['showAs'] = sub_estate['showAs'].replace("/", "-")
+                print(sub_estate['showAs'])
             # Change the report name to the sub estate name
-            report_name = f"{sub_estate['name']}{'_'}"
+            report_name = f"{sub_estate['showAs']}{'_'}"
             print(f"Printing sub estate - {report_name}")
             print_report()
             # Reset report columns ready for next report
@@ -1011,6 +1057,5 @@ else:
     all_machines_count += total_machines
     print(f"Total Number Of Machines: {all_machines_count}")
     print_report()
-time_since_start = time.time()
-# res = timedelta(seconds=time_since_start - start_time)
-print(f"Script run time - {timedelta(seconds=time_since_start - start_time)}")
+end_time = time.time()
+print(f"Script run time - {timedelta(seconds=end_time - script_start_time)}")
