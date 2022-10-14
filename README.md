@@ -22,3 +22,10 @@ Added the option to add the sub estate ID to the report
 
 v2.41
 Fixed an issue where under some circumstances Alerts would get a 403 error
+
+v2.46
+Fixed an issue where the sub estate names would be incorrect
+Added the option to only report on machines with issues. This includes, bad service health and bad threat health as well as general health
+Fixed an issue where machines with strange characters in the hostname (inlcuding emoji's) would look wrong in the report. The application reading the file needs to support these character. Excel by default does not. Apple Numbers is an application that does
+Colour has been added to the console. Run the script via PowerShell to see the colour
+The service order has been changed to reflect the new modern Endpoint services. These are now at the beginning
