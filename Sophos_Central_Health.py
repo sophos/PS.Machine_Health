@@ -20,7 +20,7 @@
 #
 # By: Michael Curtis and Robert Prechtel
 # Date: 29/5/2020
-# Version 2.46
+# Version 2.50
 # README: This script is an unsupported solution provided by Sophos Professional Services
 
 import requests
@@ -36,6 +36,8 @@ from datetime import timedelta
 import time
 # Import getpass for Client Secret
 import getpass
+# Allows colour to work in Microsoft PowerShell
+os.system("")
 
 today = date.today()
 now = datetime.now()
@@ -93,8 +95,10 @@ services_list = ['Sophos AutoUpdate Service',
                  'SophosAntiVirus',
                  'Sophos Network Extension',
                  'SophosAutoUpdate',
+                 'SophosUpdater',
                  'SophosSXLD',
                  'SophosMcsAgentD',
+                 'SophosModernWebIntelligence',
                  'SophosWebIntelligence',
                  'SophosEncryptionD',
                  'SophosMDR',
@@ -196,7 +200,21 @@ def get_all_sub_estates():
         total_pages -= 1
     # Remove X-Organization-ID from headers dictionary. We don't need this anymore
     del headers[organization_header]
-    # Debug code
+    # Print list of sub estates
+    for index, sub_estate_name in enumerate(sub_estate_list):
+        print(index, "-", sub_estate_name)
+    if show_sse_menu == 1:
+        # Choose the sub estate you want to audit
+        choice = input("Which sub estate do you want to audit? Enter the number or A for all: ")
+        if choice.lower() != 'a':
+            choice = int(choice)
+            # print(sub_estate_list[choice])
+            # Get the sub estate details from sub_estate_list
+            temp = sub_estate_list[choice]
+            # Clear the list. At this point it contains all the sub estates
+            sub_estate_list.clear()
+            # Add the sub estate you want to audit back into the empty sub_estate_list
+            sub_estate_list.append(temp)
     print(f"Sub Estates Found: {(len(sub_estate_list))}")
 
 
@@ -237,7 +255,7 @@ def get_all_computers(sub_estate_token, url, sub_estate_name, alerts_url):
         request_computers = requests.get(computers_url, headers=headers)
         while request_computers.status_code == 429:
             request_computers = requests.get(computers_url, headers=headers)
-            print(f" -> Get_All_Computers GET (already found computers={computer_in_sub_estate_count}) "
+            print(f" -> Get_All_Computers GET (already found computers={machines_in_sub_estate}) "
                   f"result: {request_computers.status_code}")
             if request_computers.status_code == 200:
                 break
@@ -290,13 +308,11 @@ def get_all_computers(sub_estate_token, url, sub_estate_name, alerts_url):
             # If no hostname is returned add unknown
             if 'hostname' not in computer_dictionary.keys():
                 computer_dictionary['hostname'] = 'Unknown'
-            # Debug code. Uncomment the line below if you want to find the machine causing the error
-            # print(computer_dictionary['hostname'])
+            # If a machine fails, uncomment the line below to print machine names
+            # print(f"Checking computer name: {bcolours.OKBLUE}{computer_dictionary['hostname']}{bcolours.ENDC}")
             # This line allows you to debug on a certain computer. Add computer name
             if debug_machine == computer_dictionary['hostname']:
                 print('Add breakpoint here')
-            # If a machine fails, uncomment the file below to print machine names
-            # print(f"Computer name: {computer_dictionary['hostname']}")
             # Sends the last seen date to get_days_since_last_seen and converts this to days
             if 'lastSeenAt' in computer_dictionary.keys():
                 computer_dictionary['Last_Seen'] = get_days_since_last_seen(computer_dictionary['lastSeenAt'])
@@ -333,21 +349,22 @@ def get_all_computers(sub_estate_token, url, sub_estate_name, alerts_url):
                 computer_dictionary['health'] = computer_dictionary['health']['overall']
             # Check to see if the key value for platform returns Mac.
             # If so make the OS key equal the Mac version else return the platform name for Windows and Linx
-            if 'macOS' in computer_dictionary['os']['platform']:
-                computer_dictionary['os'] = str(computer_dictionary['os']['platform']) + ' ' + str(
-                    computer_dictionary['os']['majorVersion']) + '.' + str(
-                    computer_dictionary['os']['minorVersion']) + '.' + str(computer_dictionary['os']['build'])
-            else:
-                # Add the build number if the OS is Windows and build number exists
-                # Checks the os name is returned. If not add unknown
-                try:
-                    computer_dictionary['os']['name']
-                    if 'Windows' in computer_dictionary['os']['name'] and 'build' in \
-                            computer_dictionary['os'] and windows_build_version == 1:
-                        computer_dictionary['windows_build'] = (computer_dictionary['os']['build'])
-                    computer_dictionary['os'] = computer_dictionary['os']['name']
-                except:
-                    computer_dictionary['os'] = 'Unknown'
+            if 'os' in computer_dictionary.keys():
+                if 'macOS' in computer_dictionary['os']['platform']:
+                    computer_dictionary['os'] = str(computer_dictionary['os']['platform']) + ' ' + str(
+                        computer_dictionary['os']['majorVersion']) + '.' + str(
+                        computer_dictionary['os']['minorVersion']) + '.' + str(computer_dictionary['os']['build'])
+                else:
+                    # Add the build number if the OS is Windows and build number exists
+                    # Checks the os name is returned. If not add unknown
+                    try:
+                        computer_dictionary['os']['name']
+                        if 'Windows' in computer_dictionary['os']['name'] and 'build' in \
+                                computer_dictionary['os'] and windows_build_version == 1:
+                            computer_dictionary['windows_build'] = (computer_dictionary['os']['build'])
+                        computer_dictionary['os'] = computer_dictionary['os']['name']
+                    except:
+                        computer_dictionary['os'] = 'Unknown'
             # Add Cloud fields if the server is in Azure, AWS or GCP via Sophos Central
             # Checks to see if the instanceid is present in the cloud key
             try:
@@ -397,21 +414,22 @@ def get_all_computers(sub_estate_token, url, sub_estate_name, alerts_url):
                         # Work around missing version
                         if 'version' in products:
                             computer_dictionary[product_version_name] = products['version']
-            if organization_type == "tenant":
-                # Provides direct link to the machines if the Sophos Central console is a tenant
-                # Also returns the id used in the Sophos Central GUI
-                computer_dictionary['Machine_URL'], computer_dictionary['gui_id'] = \
-                    make_valid_client_id(computer_dictionary['type'],
-                                         computer_dictionary['id'])
-            else:
-                computer_dictionary['Machine_URL'], computer_dictionary['gui_id'] = \
-                    make_valid_client_id(computer_dictionary['type'],
-                                         computer_dictionary['id'])
-                # Replace the URL as not helpful for Sophos Central Enterprise Dashboard or Partner
-                computer_dictionary['Machine_URL'] = 'N/A'
-                # Adds the sub estate name to the computer dictionary
-                # only if the console is Sophos Central Enterprise Dashboard or MSP
-                computer_dictionary['Sub Estate'] = sub_estate_name
+            if 'type' in computer_dictionary.keys():
+                if organization_type == "tenant":
+                    # Provides direct link to the machines if the Sophos Central console is a tenant
+                    # Also returns the id used in the Sophos Central GUI
+                    computer_dictionary['Machine_URL'], computer_dictionary['gui_id'] = \
+                        make_valid_client_id(computer_dictionary['type'],
+                                             computer_dictionary['id'])
+                else:
+                    computer_dictionary['Machine_URL'], computer_dictionary['gui_id'] = \
+                        make_valid_client_id(computer_dictionary['type'],
+                                             computer_dictionary['id'])
+                    # Replace the URL as not helpful for Sophos Central Enterprise Dashboard or Partner
+                    computer_dictionary['Machine_URL'] = 'N/A'
+                    # Adds the sub estate name to the computer dictionary
+                    # only if the console is Sophos Central Enterprise Dashboard or MSP
+                    computer_dictionary['Sub Estate'] = sub_estate_name
             # Checks if we want the MAC Address reported and the MAC Address is returned
             if mac_address == 1 and 'macAddresses' in all_computers:
                 computer_dictionary['macAddresses'] = all_computers['macAddresses']
@@ -543,6 +561,7 @@ def get_all_computers(sub_estate_token, url, sub_estate_name, alerts_url):
         # Making a dictionary as no dictionary made due to no machines in the sub estate
         computer_dictionary = {'hostname': 'Empty sub estate', 'Sub Estate': sub_estate_name}
         computer_list.append(computer_dictionary)
+    # print(url)
     print(f'Checked sub estate - {sub_estate_name}. Machines in sub estate {machines_in_sub_estate}')
     return machines_in_sub_estate
 
@@ -600,6 +619,7 @@ def read_config():
     split_edb_reports = config.getint('EXTRA_FIELDS', 'Split_EDB_Reports')
     include_sse_id = config.getint('EXTRA_FIELDS', 'Include_Sub_EstateID')
     list_machines_with_issues_only = config.getint('EXTRA_FIELDS', 'List_Machines_With_Issues_Only')
+    show_sse_menu = config.getint('EXTRA_FIELDS', 'Show_sse_menu')
     # Checks if the last character of the file path contains a \ or / if not add one
     if report_file_path[-1].isalpha():
         if os.name != "posix":
@@ -607,7 +627,7 @@ def read_config():
         else:
             report_file_path = report_file_path + "/"
     return (client_id, client_secret, report_name, report_file_path, mac_address, versions, windows_build_version,
-            cloud_servers, exclude_alerts, full_services_list, split_edb_reports, include_sse_id, list_machines_with_issues_only)
+            cloud_servers, exclude_alerts, full_services_list, split_edb_reports, include_sse_id, list_machines_with_issues_only,show_sse_menu)
 
 
 def report_field_names():
@@ -647,24 +667,13 @@ def report_field_names():
                            'Sophos Clean',
                            'Sophos Device Control Service',
                            'Sophos Device Encryption Service',
-                           # 'Sophos EDR Agent',
-                           # 'Sophos Endpoint Defense',
-                           # 'Sophos Endpoint Defense Service',
                            'Sophos File Integrity Monitoring',
-                           # 'Sophos File Scanner',
-                           # 'Sophos File Scanner Service',
-                           # 'Sophos IPS',
                            'Sophos Snort',
                            'File Detection',
-                           # 'Sophos MCS Agent',
-                           # 'Sophos MCS Client',
                            'Sophos Heartbeat',
-                           # 'Sophos Network Threat Protection',
                            'Sophos Safestore Service',
                            'Sophos Safestore',
-                           # 'Sophos System Protection Service',
                            'Sophos Lockdown Service',
-                           # 'Sophos NetFilter',
                            'Sophos Web Control Service',
                            'Sophos Web Intelligence Filter Service',
                            'Sophos Web Intelligence Service',
@@ -684,8 +693,10 @@ def report_field_names():
                            'SophosAntiVirus',
                            'Sophos Network Extension',
                            'SophosAutoUpdate',
+                           'SophosUpdater',
                            'SophosSXLD',
                            'SophosMcsAgentD',
+                           'SophosModernWebIntelligence',
                            'SophosWebIntelligence',
                            'SophosEncryptionD',
                            'SophosMDR',
@@ -716,6 +727,8 @@ def report_field_names():
                            'MTR Version',
                            'XDR',
                            'XDR Version',
+                           'ZTNA',
+                           'ZTNA Version',
                            'IP Addresses',
                            'Mac Addresses',
                            'Last User',
@@ -758,24 +771,13 @@ def report_field_names():
                            'Sophos Clean',
                            'Sophos Device Control Service',
                            'Sophos Device Encryption Service',
-                           # 'Sophos EDR Agent',
-                           # 'Sophos Endpoint Defense',
-                           # 'Sophos Endpoint Defense Service',
                            'Sophos File Integrity Monitoring',
-                           # 'Sophos File Scanner',
-                           #'Sophos File Scanner Service',
-                           # 'Sophos IPS',
                            'Sophos Snort',
                            'File Detection',
-                           # 'Sophos MCS Agent',
-                           # 'Sophos MCS Client',
                            'Sophos Heartbeat',
-                           # 'Sophos Network Threat Protection',
                            'Sophos Safestore Service',
                            'Sophos Safestore',
-                           # 'Sophos System Protection Service',
                            'Sophos Lockdown Service',
-                           # 'Sophos NetFilter',
                            'Sophos Web Control Service',
                            'Sophos Web Intelligence Filter Service',
                            'Sophos Web Intelligence Service',
@@ -795,8 +797,10 @@ def report_field_names():
                            'SophosAntiVirus',
                            'Sophos Network Extension',
                            'SophosAutoUpdate',
+                           'SophosUpdater',
                            'SophosSXLD',
                            'SophosMcsAgentD',
+                           'SophosModernWebIntelligence',
                            'SophosWebIntelligence',
                            'SophosEncryptionD',
                            'SophosMDR',
@@ -827,6 +831,8 @@ def report_field_names():
                            'v_mtr',
                            'xdr',
                            'v_xdr',
+                           'ztna',
+                           'v_ztna',
                            'ipv4Addresses',
                            'macAddresses',
                            'associatedPerson',
@@ -959,12 +965,14 @@ def print_report():
         report_column_names.remove('Device Encryption Version')
         report_column_names.remove('MTR Version')
         report_column_names.remove('XDR Version')
+        report_column_names.remove('ZTNA Version')
         report_column_order.remove('v_interceptX')
         report_column_order.remove('v_endpointProtection')
         report_column_order.remove('v_coreAgent')
         report_column_order.remove('v_deviceEncryption')
         report_column_order.remove('v_mtr')
         report_column_order.remove('v_xdr')
+        report_column_order.remove('v_ztna')
     if windows_build_version == 0:
         report_column_names.remove('Windows Build')
         report_column_order.remove('windows_build')
@@ -1002,7 +1010,7 @@ def print_report():
 
 
 client_id, client_secret, report_name, report_file_path, mac_address, versions, windows_build_version, cloud_servers, \
-    include_alerts, full_services_list, split_edb_reports, include_sse_id, list_machines_with_issues_only = read_config()
+    include_alerts, full_services_list, split_edb_reports, include_sse_id, list_machines_with_issues_only, show_sse_menu = read_config()
 token_url = 'https://id.sophos.com/api/v2/oauth2/token'
 headers = get_bearer_token(client_id, client_secret, token_url)
 organization_id, organization_header, organization_type, region_url = get_whoami()
