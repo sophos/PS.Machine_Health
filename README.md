@@ -29,3 +29,7 @@ Added the option to only report on machines with issues. This includes, bad serv
 Fixed an issue where machines with strange characters in the hostname (inlcuding emoji's) would look wrong in the report. The application reading the file needs to support these character. Excel by default does not. Apple Numbers is an application that does
 Colour has been added to the console. Run the script via PowerShell to see the colour
 The service order has been changed to reflect the new modern Endpoint services. These are now at the beginning
+
+v2.50
+Added the new Endpoint services
+Added the ability for MSP and EDB customers to turn on a menu that will list all the consoles and run a report on a single one
