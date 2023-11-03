@@ -33,3 +33,6 @@ The service order has been changed to reflect the new modern Endpoint services. 
 v2.50
 Added the new Endpoint services
 Added the ability for MSP and EDB customers to turn on a menu that will list all the consoles and run a report on a single one
+
+v2.52
+Fixed an issue when the SophosCBR service was present
