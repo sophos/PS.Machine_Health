@@ -12,15 +12,13 @@
 # implied. See the License for the specific language governing permissions and
 # limitations under the License.
 #
-#
 # sophos_central_health.py
 #
 # Outputs csv file containing full inventory and health status of all devices in Sophos Central
 #
-#
 # By: Michael Curtis and Robert Prechtel
 # Date: 29/5/2020
-# Version 2.50
+# Version 2.52
 # README: This script is an unsupported solution provided by Sophos Professional Services
 
 import requests
@@ -98,6 +96,7 @@ services_list = ['Sophos AutoUpdate Service',
                  'SophosUpdater',
                  'SophosSXLD',
                  'SophosMcsAgentD',
+                 'SophosCBR',
                  'SophosModernWebIntelligence',
                  'SophosWebIntelligence',
                  'SophosEncryptionD',
@@ -196,7 +195,9 @@ def get_all_sub_estates():
             # Make a temporary Dictionary to be added to the sub estate list
             sub_estate_dictionary = {key: value for key, value in all_sub_estates.items() if key in sub_estate_keys}
             sub_estate_list.append(sub_estate_dictionary)
-            print(f"Sub Estate - {sub_estate_dictionary['showAs']}. Sub Estate ID - {sub_estate_dictionary['id']}")
+            #if (len(sub_estate_dictionary)) != 4:
+            #    print(sub_estate_dictionary)
+        print(f"Sub Estate - {sub_estate_dictionary['showAs']}. Sub Estate ID - {sub_estate_dictionary['id']}")
         total_pages -= 1
     # Remove X-Organization-ID from headers dictionary. We don't need this anymore
     del headers[organization_header]
@@ -398,7 +399,6 @@ def get_all_computers(sub_estate_token, url, sub_estate_name, alerts_url):
             if 'group' in all_computers.keys():
                 computer_dictionary['group'] = all_computers['group']['name']
             # Checks if capabilities returns more than nothing
-
             # if len(all_computers['capabilities']) != 0: - old code
             if 'capabilities' in all_computers.keys():
                 computer_dictionary['capabilities'] = all_computers['capabilities']
@@ -696,6 +696,7 @@ def report_field_names():
                            'SophosUpdater',
                            'SophosSXLD',
                            'SophosMcsAgentD',
+                           'SophosCBR',
                            'SophosModernWebIntelligence',
                            'SophosWebIntelligence',
                            'SophosEncryptionD',
@@ -800,6 +801,7 @@ def report_field_names():
                            'SophosUpdater',
                            'SophosSXLD',
                            'SophosMcsAgentD',
+                           'SophosCBR',
                            'SophosModernWebIntelligence',
                            'SophosWebIntelligence',
                            'SophosEncryptionD',
