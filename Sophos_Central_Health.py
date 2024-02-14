@@ -12,13 +12,15 @@
 # implied. See the License for the specific language governing permissions and
 # limitations under the License.
 #
+#
 # sophos_central_health.py
 #
 # Outputs csv file containing full inventory and health status of all devices in Sophos Central
 #
+#
 # By: Michael Curtis and Robert Prechtel
 # Date: 29/5/2020
-# Version 2.52
+# Version 2.66
 # README: This script is an unsupported solution provided by Sophos Professional Services
 
 import requests
@@ -68,6 +70,7 @@ services_list = ['Sophos AutoUpdate Service',
                  'Sophos MCS Agent',
                  'Sophos MCS Client',
                  'Sophos Heartbeat',
+                 'Sophos MCS Heartbeat',
                  'Sophos Network Threat Protection',
                  'Sophos Safestore Service',
                  'Sophos Safestore',
@@ -79,12 +82,14 @@ services_list = ['Sophos AutoUpdate Service',
                  'Sophos Web Intelligence Service',
                  'Sophos Update Cache',
                  'Sophos Message Relay Service',
+                 'Sophos Data Recorder',
                  # Mac service list
                  'SophosHeartbeatD',
                  'SophosDeviceControlD',
                  'SophosLiveQuery',
                  'SophosEncryptionCentralAdapter',
                  'SophosScanD',
+                 'Sophos Detection',
                  'SophosConfigD',
                  'SophosEventMonitor',
                  'SophosHealthD',
@@ -107,6 +112,8 @@ services_list = ['Sophos AutoUpdate Service',
                  'SophosScanDLegacy',
                  'SophosLiveResponse',
                  'ServiceManager',
+                 'InterCheck',
+                 'SophosWebNetworkExtension',
                  # Linux
                  'Update Scheduler',
                  'Sophos Linux AntiVirus',
@@ -169,8 +176,6 @@ def get_whoami():
     # The region_url is used if Sophos Central is a tenant
     region_url = whoami.get('apiHosts', {}).get("dataRegion", None)
     return organization_id, organization_header, organization_type, region_url
-
-
 def get_all_sub_estates():
     # Add X-Organization-ID to the headers dictionary
     headers[organization_header] = organization_id
@@ -195,9 +200,7 @@ def get_all_sub_estates():
             # Make a temporary Dictionary to be added to the sub estate list
             sub_estate_dictionary = {key: value for key, value in all_sub_estates.items() if key in sub_estate_keys}
             sub_estate_list.append(sub_estate_dictionary)
-            #if (len(sub_estate_dictionary)) != 4:
-            #    print(sub_estate_dictionary)
-        print(f"Sub Estate - {sub_estate_dictionary['showAs']}. Sub Estate ID - {sub_estate_dictionary['id']}")
+            print(f"Sub Estate - {sub_estate_dictionary['showAs']}. Sub Estate ID - {sub_estate_dictionary['id']}")
         total_pages -= 1
     # Remove X-Organization-ID from headers dictionary. We don't need this anymore
     del headers[organization_header]
@@ -309,8 +312,9 @@ def get_all_computers(sub_estate_token, url, sub_estate_name, alerts_url):
             # If no hostname is returned add unknown
             if 'hostname' not in computer_dictionary.keys():
                 computer_dictionary['hostname'] = 'Unknown'
+                continue
             # If a machine fails, uncomment the line below to print machine names
-            # print(f"Checking computer name: {bcolours.OKBLUE}{computer_dictionary['hostname']}{bcolours.ENDC}")
+            print(f"Checking computer name: {bcolours.OKBLUE}{computer_dictionary['hostname']}{bcolours.ENDC} - {request_computers.status_code}")
             # This line allows you to debug on a certain computer. Add computer name
             if debug_machine == computer_dictionary['hostname']:
                 print('Add breakpoint here')
@@ -338,7 +342,7 @@ def get_all_computers(sub_estate_token, url, sub_estate_name, alerts_url):
                         for services in all_computers['health']['services']['serviceDetails']:
                             service_name = services['name']
                             computer_dictionary[service_name] = services['status']
-                            if service_name == "ServiceManager":
+                            if service_name == "SophosWebNetworkExtension":
                                 print('Add breakpoint here')
                 else:
                     computer_dictionary['service_health'] = 'investigate'
@@ -399,6 +403,7 @@ def get_all_computers(sub_estate_token, url, sub_estate_name, alerts_url):
             if 'group' in all_computers.keys():
                 computer_dictionary['group'] = all_computers['group']['name']
             # Checks if capabilities returns more than nothing
+
             # if len(all_computers['capabilities']) != 0: - old code
             if 'capabilities' in all_computers.keys():
                 computer_dictionary['capabilities'] = all_computers['capabilities']
@@ -408,12 +413,13 @@ def get_all_computers(sub_estate_token, url, sub_estate_name, alerts_url):
                 for products in all_computers['assignedProducts']:
                     # This loops through the product names and gets the versions. We may not add these to the report
                     product_names = products['code']
-                    computer_dictionary[product_names] = products['status']
-                    product_version_name = f"v_{product_names}"
-                    if products['status'] == 'installed' and versions == 1:
-                        # Work around missing version
-                        if 'version' in products:
-                            computer_dictionary[product_version_name] = products['version']
+                    if product_names != "endpointProtection":
+                        computer_dictionary[product_names] = products['status']
+                        product_version_name = f"v_{product_names}"
+                        if products['status'] == 'installed' and versions == 1:
+                            # Work around missing version
+                            if 'version' in products:
+                                computer_dictionary[product_version_name] = products['version']
             if 'type' in computer_dictionary.keys():
                 if organization_type == "tenant":
                     # Provides direct link to the machines if the Sophos Central console is a tenant
@@ -536,13 +542,23 @@ def get_all_computers(sub_estate_token, url, sub_estate_name, alerts_url):
                     computer_dictionary['Sub EstateID'] = sub_estate_token
             # Add all machines
             if list_machines_with_issues_only == 0:
-                computer_list.append(computer_dictionary)
+                # If list_machines_in_group is empty add the machines
+                if list_machines_in_group[0] == "":
+                    computer_list.append(computer_dictionary)
+                elif 'group' in computer_dictionary and computer_dictionary['group'] in list_machines_in_group:
+                    computer_list.append(computer_dictionary)
             # Add machine if health is not good and listing only broken machine
             elif 'health' in computer_dictionary and computer_dictionary['health'] != 'good':
-                computer_list.append(computer_dictionary)
+                if list_machines_in_group == "":
+                    computer_list.append(computer_dictionary)
+                elif 'group' in computer_dictionary and computer_dictionary['group'] in list_machines_in_group:
+                    computer_list.append(computer_dictionary)
             # Adding machines with no health and listing only broken machines
             elif 'health' not in computer_dictionary:
-                computer_list.append(computer_dictionary)
+                if list_machines_in_group == "":
+                    computer_list.append(computer_dictionary)
+                elif 'group' in computer_dictionary and computer_dictionary['group'] in list_machines_in_group:
+                    computer_list.append(computer_dictionary)
         # Check to see if you have more than one page of machines by checking if nextKey exists
         # We need to check if we need to page through lots of computers
         if 'nextKey' in computers_json['pages']:
@@ -603,6 +619,7 @@ def make_valid_client_id(os, machine_id):
 def read_config():
     config = configparser.ConfigParser()
     config.read('Sophos_Central_Health.config')
+    # config.read('Sophos_Central_Health.config')
     config.sections()
     client_id = config['DEFAULT']['ClientID']
     client_secret = config['DEFAULT']['ClientSecret']
@@ -620,6 +637,8 @@ def read_config():
     include_sse_id = config.getint('EXTRA_FIELDS', 'Include_Sub_EstateID')
     list_machines_with_issues_only = config.getint('EXTRA_FIELDS', 'List_Machines_With_Issues_Only')
     show_sse_menu = config.getint('EXTRA_FIELDS', 'Show_sse_menu')
+    list_machines_in_group = config['EXTRA_FIELDS']['List_Machines_In_Group']
+    list_machines_in_group = list_machines_in_group.split(',')
     # Checks if the last character of the file path contains a \ or / if not add one
     if report_file_path[-1].isalpha():
         if os.name != "posix":
@@ -627,7 +646,7 @@ def read_config():
         else:
             report_file_path = report_file_path + "/"
     return (client_id, client_secret, report_name, report_file_path, mac_address, versions, windows_build_version,
-            cloud_servers, exclude_alerts, full_services_list, split_edb_reports, include_sse_id, list_machines_with_issues_only,show_sse_menu)
+            cloud_servers, exclude_alerts, full_services_list, split_edb_reports, include_sse_id, list_machines_with_issues_only,show_sse_menu, list_machines_in_group)
 
 
 def report_field_names():
@@ -671,6 +690,7 @@ def report_field_names():
                            'Sophos Snort',
                            'File Detection',
                            'Sophos Heartbeat',
+                           'Sophos MCS Heartbeat',
                            'Sophos Safestore Service',
                            'Sophos Safestore',
                            'Sophos Lockdown Service',
@@ -679,12 +699,14 @@ def report_field_names():
                            'Sophos Web Intelligence Service',
                            'Sophos Update Cache',
                            'Sophos Message Relay Service',
+                           'Sophos Data Recorder',
                            # Mac service list
                            'SophosHeartbeatD',
                            'SophosDeviceControlD',
                            'SophosLiveQuery',
                            'SophosEncryptionCentralAdapter',
                            'SophosScanD',
+                           'Sophos Detection',
                            'SophosConfigD',
                            'SophosEventMonitor',
                            'SophosHealthD',
@@ -707,6 +729,8 @@ def report_field_names():
                            'SophosScanDLegacy',
                            'SophosLiveResponse',
                            'ServiceManager',
+                           'InterCheck',
+                           'SophosWebNetworkExtension',
                            # Linux
                            'Update Scheduler',
                            'Sophos Linux AntiVirus',
@@ -718,14 +742,15 @@ def report_field_names():
                            'Group',
                            'Core Agent',
                            'Core Agent Version',
-                           'Endpoint Protection',
-                           'Endpoint Protection Version',
+                           # Endpoint is now removed from the report as you can no longer install it without Intercept X
+                           # 'Endpoint Protection',
+                           # 'Endpoint Protection Version',
                            'Intercept X',
                            'Intercept X Version',
                            'Device Encryption',
                            'Device Encryption Version',
-                           'MTR',
-                           'MTR Version',
+                           'MDR',
+                           'MDR Version',
                            'XDR',
                            'XDR Version',
                            'ZTNA',
@@ -776,6 +801,7 @@ def report_field_names():
                            'Sophos Snort',
                            'File Detection',
                            'Sophos Heartbeat',
+                           'Sophos MCS Heartbeat',
                            'Sophos Safestore Service',
                            'Sophos Safestore',
                            'Sophos Lockdown Service',
@@ -784,12 +810,14 @@ def report_field_names():
                            'Sophos Web Intelligence Service',
                            'Sophos Update Cache',
                            'Sophos Message Relay Service',
+                           'Sophos Data Recorder',
                            # Mac service list
                            'SophosHeartbeatD',
                            'SophosDeviceControlD',
                            'SophosLiveQuery',
                            'SophosEncryptionCentralAdapter',
                            'SophosScanD',
+                           'Sophos Detection',
                            'SophosConfigD',
                            'SophosEventMonitor',
                            'SophosHealthD',
@@ -812,6 +840,8 @@ def report_field_names():
                            'SophosScanDLegacy',
                            'SophosLiveResponse',
                            'ServiceManager',
+                           'InterCheck',
+                           'SophosWebNetworkExtension',
                            # Linux
                            'Update Scheduler',
                            'Sophos Linux AntiVirus',
@@ -823,8 +853,9 @@ def report_field_names():
                            'group',
                            'coreAgent',
                            'v_coreAgent',
-                           'endpointProtection',
-                           'v_endpointProtection',
+                           # Endpoint is now removed from the report as you can no longer install it without Intercept X
+                           # 'endpointProtection',
+                           # 'v_endpointProtection',
                            'interceptX',
                            'v_interceptX',
                            'deviceEncryption',
@@ -956,20 +987,25 @@ def get_all_alerts(tenant_token, url, sub_estate_name):
 
 def print_report():
     full_report_path = f"{report_file_path}{report_name}{time_stamp}{'.csv'}"
+    # Endpoint is now removed from the report as you can no longer install it without Intercept X
+    # report_column_names.remove('Endpoint Protection')
+    # report_column_order.remove('endpointProtection')
+    # report_column_names.remove('Endpoint Protection Version')
+    # report_column_order.remove('v_endpointProtection')
     # Remove the report columns that aren't required from the extra fields selection
     if mac_address == 0:
         report_column_names.remove('Mac Addresses')
         report_column_order.remove('macAddresses')
     if versions == 0:
         report_column_names.remove('Intercept X Version')
-        report_column_names.remove('Endpoint Protection Version')
+        # report_column_names.remove('Endpoint Protection Version')
         report_column_names.remove('Core Agent Version')
         report_column_names.remove('Device Encryption Version')
-        report_column_names.remove('MTR Version')
+        report_column_names.remove('MDR Version')
         report_column_names.remove('XDR Version')
         report_column_names.remove('ZTNA Version')
         report_column_order.remove('v_interceptX')
-        report_column_order.remove('v_endpointProtection')
+        # report_column_order.remove('v_endpointProtection')
         report_column_order.remove('v_coreAgent')
         report_column_order.remove('v_deviceEncryption')
         report_column_order.remove('v_mtr')
@@ -989,7 +1025,7 @@ def print_report():
         report_column_names.remove('No. Medium Alerts')
         report_column_order.remove('number_medium_alerts')
     if full_services_list == 0:
-        # Code to try and remove services in a neater way.
+        # Code to try and remove  in a neater way.
         for columns in services_list:
             report_column_names.remove(columns)
             report_column_order.remove(columns)
@@ -1012,7 +1048,7 @@ def print_report():
 
 
 client_id, client_secret, report_name, report_file_path, mac_address, versions, windows_build_version, cloud_servers, \
-    include_alerts, full_services_list, split_edb_reports, include_sse_id, list_machines_with_issues_only, show_sse_menu = read_config()
+    include_alerts, full_services_list, split_edb_reports, include_sse_id, list_machines_with_issues_only, show_sse_menu, list_machines_in_group = read_config()
 token_url = 'https://id.sophos.com/api/v2/oauth2/token'
 headers = get_bearer_token(client_id, client_secret, token_url)
 organization_id, organization_header, organization_type, region_url = get_whoami()
