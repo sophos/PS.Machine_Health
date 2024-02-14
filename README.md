@@ -36,3 +36,9 @@ Added the ability for MSP and EDB customers to turn on a menu that will list all
 
 v2.52
 Fixed an issue when the SophosCBR service was present
+
+v2.66
+The Endpoint column has been removed. This is no longer requried as you can't install Intercept X without AV
+Add the ability to report on machines in certain groups - This requires the new config file
+Renamed the MTR column to MDR
+Fixed an issue where if the services option was used and the machines were very old, the script would crash
