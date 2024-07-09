@@ -5,6 +5,11 @@ This script replaces the previous scripts Endpoint_Health_EDB_MSP and Endpoint_H
 Alerts have also been added to the report
 The config file allows other data to be added to the report as required
 
+v2024.12
+Changed to a new versioning scheme
+Fixed an issue where all machines would be reported even if only broken machines was seletected
+Added the option to report on machines in Adaptive Attack Protection. This is in beta. It slows the script down a lot, seriously, a lot.
+
 v2.20
 Fixed an issue when the script was run against a Sophos Central Enterprise Dashboard
 
