@@ -20,7 +20,7 @@
 #
 # By: Michael Curtis and Robert Prechtel
 # Date: 29/5/2020
-# Version 2.66
+# Version v2024.12
 # README: This script is an unsupported solution provided by Sophos Professional Services
 
 import requests
@@ -228,6 +228,9 @@ def get_all_computers(sub_estate_token, url, sub_estate_name, alerts_url):
     # Get all Computers from sub estates
     # Add pageSize to url and the view of full
     pagesize = 500
+    # Store the base URL before it is changed to get all the computers
+    # Comes in useful for other queries, for example AAP
+    base_url = url
     url = f"{url}{'/endpoints?pageSize='}{pagesize}{'&view=full'}"
     computers_url = url
     # Loop while the page_count is not equal to 0. We have more computers to query
@@ -439,6 +442,13 @@ def get_all_computers(sub_estate_token, url, sub_estate_name, alerts_url):
             # Checks if we want the MAC Address reported and the MAC Address is returned
             if mac_address == 1 and 'macAddresses' in all_computers:
                 computer_dictionary['macAddresses'] = all_computers['macAddresses']
+            # Get AAP state
+            if Show_AAP_Status == 1:
+                aap_active, aap_activated_by,aap_last_updated,aap_expires = get_aap_status(computer_dictionary['id'], base_url)
+                computer_dictionary['AAP_Active'] = aap_active
+                computer_dictionary['AAP_Activated_By'] = aap_activated_by
+                computer_dictionary['AAP_Last_Updated'] = aap_last_updated
+                computer_dictionary['AAP_Expires'] = aap_expires
             # Add the alerts to the report is the configuration file is set to 1
             if include_alerts == 1:
             # print(f"Add Alerts to the report")
@@ -549,7 +559,7 @@ def get_all_computers(sub_estate_token, url, sub_estate_name, alerts_url):
                     computer_list.append(computer_dictionary)
             # Add machine if health is not good and listing only broken machine
             elif 'health' in computer_dictionary and computer_dictionary['health'] != 'good':
-                if list_machines_in_group == "":
+                if list_machines_in_group[0] == "":
                     computer_list.append(computer_dictionary)
                 elif 'group' in computer_dictionary and computer_dictionary['group'] in list_machines_in_group:
                     computer_list.append(computer_dictionary)
@@ -591,7 +601,6 @@ def get_days_since_last_seen(report_date):
     # Converts date to days
     days = (today - convert_last_seen_to_a_date).days
     return days
-
 
 def make_valid_client_id(os, machine_id):
     # Characters to be removed
@@ -639,6 +648,7 @@ def read_config():
     show_sse_menu = config.getint('EXTRA_FIELDS', 'Show_sse_menu')
     list_machines_in_group = config['EXTRA_FIELDS']['List_Machines_In_Group']
     list_machines_in_group = list_machines_in_group.split(',')
+    Show_AAP_Status = config.getint('EXTRA_FIELDS', 'Show_AAP_Status')
     # Checks if the last character of the file path contains a \ or / if not add one
     if report_file_path[-1].isalpha():
         if os.name != "posix":
@@ -646,7 +656,7 @@ def read_config():
         else:
             report_file_path = report_file_path + "/"
     return (client_id, client_secret, report_name, report_file_path, mac_address, versions, windows_build_version,
-            cloud_servers, exclude_alerts, full_services_list, split_edb_reports, include_sse_id, list_machines_with_issues_only,show_sse_menu, list_machines_in_group)
+            cloud_servers, exclude_alerts, full_services_list, split_edb_reports, include_sse_id, list_machines_with_issues_only,show_sse_menu, list_machines_in_group,Show_AAP_Status)
 
 
 def report_field_names():
@@ -662,6 +672,10 @@ def report_field_names():
                            'Encrypted Status',
                            'Last Seen Date',
                            'Days Since Last Seen',
+                           'AAP Status',
+                           'AAP Activated By',
+                           'AAP Last Updated',
+                           'AAP Expires',
                            'Health',
                            'Threats',
                            'Service Health',
@@ -742,9 +756,6 @@ def report_field_names():
                            'Group',
                            'Core Agent',
                            'Core Agent Version',
-                           # Endpoint is now removed from the report as you can no longer install it without Intercept X
-                           # 'Endpoint Protection',
-                           # 'Endpoint Protection Version',
                            'Intercept X',
                            'Intercept X Version',
                            'Device Encryption',
@@ -773,6 +784,10 @@ def report_field_names():
                            'encryption',
                            'lastSeenAt',
                            'Last_Seen',
+                           'AAP_Active',
+                           'AAP_Activated_By',
+                           'AAP_Last_Updated',
+                           'AAP_Expires',
                            'health',
                            'threats',
                            'service_health',
@@ -853,9 +868,6 @@ def report_field_names():
                            'group',
                            'coreAgent',
                            'v_coreAgent',
-                           # Endpoint is now removed from the report as you can no longer install it without Intercept X
-                           # 'endpointProtection',
-                           # 'v_endpointProtection',
                            'interceptX',
                            'v_interceptX',
                            'deviceEncryption',
@@ -875,6 +887,36 @@ def report_field_names():
     return report_column_names, report_column_order
 
 
+def get_aap_status(computer_id, url):
+    # https://api-{dataRegion}.central.sophos.com/endpoint/v1/endpoints/{endpointId}/adaptive-attack-protection
+    aap_url = f"{url}{'/endpoints/'}{computer_id}{'/adaptive-attack-protection'}"
+    request_aap_status = requests.get(aap_url, headers=headers)
+    # Convert to JSON
+    aap_json = request_aap_status.json()
+    # The endpoint might not be new enough to support this API call. Makes sure value is present
+    if 'actualState' in aap_json.keys():
+        aap_active = aap_json['actualState']['enabled']
+        if aap_active == True:
+            aap_activated_by = aap_json['desiredState']['source']
+            aap_last_updated = aap_json['actualState']['lastUpdatedAt']
+            aap_expires = aap_json['actualState']['expiresAt']
+            # Change AAP from True to Yes
+            aap_active = "Yes"
+        else:
+            # Endpoint is not in AAP mode. Need to add something to the report.
+            # Set the returns to blank to make it easier to see the machines that are in AAP mode
+            aap_activated_by = ""
+            aap_last_updated = ""
+            aap_expires = ""
+            # Change AAP from False to nothing
+            aap_active = ""
+    else:
+        # Endpoint has no AAP data. Need to add some for the report.
+        aap_activated_by = ""
+        aap_last_updated = ""
+        aap_expires = ""
+        aap_active = "AAP API not supported"
+    return aap_active, aap_activated_by,aap_last_updated,aap_expires
 def get_machine_alerts(computer_id, hostname, sub_estate_name):
     # Makes two lists of store the alert descriptions
     list_of_computer_medium_alerts = []
@@ -987,12 +1029,6 @@ def get_all_alerts(tenant_token, url, sub_estate_name):
 
 def print_report():
     full_report_path = f"{report_file_path}{report_name}{time_stamp}{'.csv'}"
-    # Endpoint is now removed from the report as you can no longer install it without Intercept X
-    # report_column_names.remove('Endpoint Protection')
-    # report_column_order.remove('endpointProtection')
-    # report_column_names.remove('Endpoint Protection Version')
-    # report_column_order.remove('v_endpointProtection')
-    # Remove the report columns that aren't required from the extra fields selection
     if mac_address == 0:
         report_column_names.remove('Mac Addresses')
         report_column_order.remove('macAddresses')
@@ -1024,6 +1060,15 @@ def print_report():
         report_column_order.remove('number_high_alerts')
         report_column_names.remove('No. Medium Alerts')
         report_column_order.remove('number_medium_alerts')
+    if Show_AAP_Status == 0:
+        report_column_names.remove('AAP Status')
+        report_column_order.remove('AAP_Active')
+        report_column_names.remove('AAP Activated By')
+        report_column_order.remove('AAP_Activated_By')
+        report_column_names.remove('AAP Last Updated')
+        report_column_order.remove('AAP_Last_Updated')
+        report_column_names.remove('AAP Expires')
+        report_column_order.remove('AAP_Expires')
     if full_services_list == 0:
         # Code to try and remove  in a neater way.
         for columns in services_list:
@@ -1048,7 +1093,7 @@ def print_report():
 
 
 client_id, client_secret, report_name, report_file_path, mac_address, versions, windows_build_version, cloud_servers, \
-    include_alerts, full_services_list, split_edb_reports, include_sse_id, list_machines_with_issues_only, show_sse_menu, list_machines_in_group = read_config()
+    include_alerts, full_services_list, split_edb_reports, include_sse_id, list_machines_with_issues_only, show_sse_menu, list_machines_in_group,Show_AAP_Status = read_config()
 token_url = 'https://id.sophos.com/api/v2/oauth2/token'
 headers = get_bearer_token(client_id, client_secret, token_url)
 organization_id, organization_header, organization_type, region_url = get_whoami()
