@@ -10,6 +10,7 @@ Remove the capability column. This was not a supported field and has been remove
 Added code to work around missing viaLogin field in the API
 Added other code to better check for fields being present
 MacOS only reports the major and minor version (15.4). I am working with developement to find out why the API is not returning the 3rd decimal place (15.4.1)
+Added code for any machines that did not return milliseconds for their last seen time
 
 Version 2025.14
 Fixed the report not deleting the new processes from the report
