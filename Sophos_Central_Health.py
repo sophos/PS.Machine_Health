@@ -20,7 +20,7 @@
 #
 # By: Michael Curtis and Robert Prechtel
 # Date: 29/5/2020
-# Version v2024.12
+# Version v2025.23
 # README: This script is an unsupported solution provided by Sophos Professional Services
 
 import requests
@@ -32,6 +32,7 @@ import os
 from datetime import date
 from datetime import datetime
 from datetime import timedelta
+from datetime import timezone
 # Import time to handle API request limits
 import time
 # Import getpass for Client Secret
@@ -103,6 +104,7 @@ services_list = ['Sophos AutoUpdate Service',
                  'SophosMcsAgentD',
                  'SophosCBR',
                  'SophosModernWebIntelligence',
+                 'Sophos Modern Web Intelligence',
                  'SophosWebIntelligence',
                  'SophosEncryptionD',
                  'SophosMDR',
@@ -114,16 +116,33 @@ services_list = ['Sophos AutoUpdate Service',
                  'ServiceManager',
                  'InterCheck',
                  'SophosWebNetworkExtension',
+                 # Mac processes with spaces
+                 'Sophos Updater',
+                 'Sophos Encryption Central Adapter',
+                 'Sophos Event Monitor',
+                 'Sophos Live Query',
+                 'Sophos Live Response',
+                 'Sophos Web Intelligence',
+                 'Sophos Encryption',
+                 'Sophos Health',
+                 'Sophos CBR',
+                 'Sophos Scan',
+                 'Sophos Config',
+                 'Sophos CryptoGuard',
+                 'Sophos Device Control',
                  # Linux
                  'Update Scheduler',
                  'Sophos Linux AntiVirus',
+                 'Sophos Linux Runtime Detections',
+                 'Sophos Linux Device Isolation',
                  ]
 # list of high alerts
 list_of_high_alerts = []
 # list of medium alerts
 list_of_medium_alerts = []
 # Put the machine name here to break on this machine
-debug_machine = 'put debug machine here'
+# debug_machine = 'MacBook Pro'
+debug_machine = 'CO-C043107'
 # Put the machine name here to break on this machine
 debug_sub_estate = 'put debug sub estate here'
 # Time the script started. Used to renew token when required
@@ -134,6 +153,7 @@ class bcolours:
     HEADER = '\033[95m'
     OKBLUE = '\033[94m'
     OKCYAN = '\033[96m'
+    OKGREEN = '\033[92m'
     OKGREEN = '\033[92m'
     WARNING = '\033[93m'
     FAIL = '\033[91m'
@@ -319,7 +339,7 @@ def get_all_computers(sub_estate_token, url, sub_estate_name, alerts_url):
             # If a machine fails, uncomment the line below to print machine names
             print(f"Checking computer name: {bcolours.OKBLUE}{computer_dictionary['hostname']}{bcolours.ENDC} - {request_computers.status_code}")
             # This line allows you to debug on a certain computer. Add computer name
-            if debug_machine == computer_dictionary['hostname']:
+            if debug_machine in computer_dictionary['hostname']:
                 print('Add breakpoint here')
             # Sends the last seen date to get_days_since_last_seen and converts this to days
             if 'lastSeenAt' in computer_dictionary.keys():
@@ -334,45 +354,71 @@ def get_all_computers(sub_estate_token, url, sub_estate_name, alerts_url):
                 computer_dictionary['Machine_URL'] = 'N/A'
                 computer_list.append(computer_dictionary)
                 continue
-            if 'health' in computer_dictionary.keys():
-                if 'status' in computer_dictionary['health']['services']:
-                    computer_dictionary['service_health'] = computer_dictionary['health']['services']['status']
-                    # Make a list of service found to make it easier to remove
-                    for services in all_computers['health']['services']['serviceDetails']:
-                        service_name = services['name']
-                    # Loops through each server and returns the status
-                    if full_services_list == 1:
-                        for services in all_computers['health']['services']['serviceDetails']:
-                            service_name = services['name']
-                            computer_dictionary[service_name] = services['status']
-                            if service_name == "SophosWebNetworkExtension":
-                                print('Add breakpoint here')
-                else:
-                    computer_dictionary['service_health'] = 'investigate'
-                if 'status' in computer_dictionary['health']['threats']:
-                    computer_dictionary['threats'] = computer_dictionary['health']['threats']['status']
-                else:
-                    computer_dictionary['threats'] = 'investigate'
-                # Any filtering you want to do has to done above this line as it changes the health dictionary
-                computer_dictionary['health'] = computer_dictionary['health']['overall']
-            # Check to see if the key value for platform returns Mac.
-            # If so make the OS key equal the Mac version else return the platform name for Windows and Linx
-            if 'os' in computer_dictionary.keys():
-                if 'macOS' in computer_dictionary['os']['platform']:
-                    computer_dictionary['os'] = str(computer_dictionary['os']['platform']) + ' ' + str(
-                        computer_dictionary['os']['majorVersion']) + '.' + str(
-                        computer_dictionary['os']['minorVersion']) + '.' + str(computer_dictionary['os']['build'])
-                else:
-                    # Add the build number if the OS is Windows and build number exists
-                    # Checks the os name is returned. If not add unknown
-                    try:
-                        computer_dictionary['os']['name']
-                        if 'Windows' in computer_dictionary['os']['name'] and 'build' in \
-                                computer_dictionary['os'] and windows_build_version == 1:
-                            computer_dictionary['windows_build'] = (computer_dictionary['os']['build'])
-                        computer_dictionary['os'] = computer_dictionary['os']['name']
-                    except:
-                        computer_dictionary['os'] = 'Unknown'
+
+            # Check if 'health' exists in the dictionary
+            if 'health' in computer_dictionary:
+
+                health = computer_dictionary['health']
+                services = health.get('services', {})
+                threats = health.get('threats', {})
+
+                # Extract top-level service health status
+                service_status = services.get('status')
+                if service_status:
+                    computer_dictionary['service_health'] = service_status
+
+                # Safe check for serviceDetails
+                service_details = services.get('serviceDetails')
+
+                if isinstance(service_details, list):
+                    # Iterate through service details
+                    for service in service_details:
+                        service_name = service.get('name')
+                        if service_name == 'Sophos Modern Web Intelligence':
+                            print()  # Add your logic here
+
+                # If flag is enabled, process and display full services list
+                if full_services_list == 1:
+                    if isinstance(service_details, list):
+                        for service in service_details:
+                            service_name = service.get('name')
+                            service_status = service.get('status')
+                            if service_name and service_status:
+                                computer_dictionary[service_name] = service_status
+                                if service_name == "SophosWebNetworkExtension":
+                                    print('Add breakpoint here')
+                    else:
+                        computer_dictionary['service_health'] = 'Investigate' # service_health key is missing
+
+                # Handle threats
+                computer_dictionary['threats'] = threats.get('status', 'Investigate')
+
+                # Overwrite health with overall status
+                computer_dictionary['health'] = health.get('overall')
+            try:
+               # Check the platform key exists
+                computer_dictionary['os']['platform']
+                # Check to see if the key value for platform returns Mac.
+                # If so make the OS key equal the Mac version else return the platform name for Windows and Linx
+                if 'os' in computer_dictionary.keys():
+                    if 'macOS' in computer_dictionary['os']['platform']:
+                        computer_dictionary['os'] = str(computer_dictionary['os']['platform']) + ' ' + str(
+                            computer_dictionary['os']['majorVersion']) + '.' + str(
+                            # computer_dictionary['os']['minorVersion']) + '.' + str(computer_dictionary['os']['build'])
+                            computer_dictionary['os']['minorVersion'])
+                    else:
+                        # Add the build number if the OS is Windows and build number exists
+                        # Checks the os name is returned. If not add unknown
+                        try:
+                            computer_dictionary['os']['name']
+                            if 'windows' in computer_dictionary['os']['platform'] and 'build' in \
+                                    computer_dictionary['os'] and windows_build_version == 1:
+                                computer_dictionary['windows_build'] = (computer_dictionary['os']['build'])
+                            computer_dictionary['os'] = computer_dictionary['os']['name']
+                        except:
+                            computer_dictionary['os'] = 'Unknown'
+            except KeyError:
+                 computer_dictionary['os'] = 'Unknown'
             # Add Cloud fields if the server is in Azure, AWS or GCP via Sophos Central
             # Checks to see if the instanceid is present in the cloud key
             try:
@@ -389,7 +435,9 @@ def get_all_computers(sub_estate_token, url, sub_estate_name, alerts_url):
                     computer_dictionary['instanceid'] = ''
             # If a user is returned tidy up the value. It is checking for the key being present
             if 'associatedPerson' in computer_dictionary.keys():
-                computer_dictionary['associatedPerson'] = computer_dictionary['associatedPerson']['viaLogin']
+                    associatedPerson = computer_dictionary['associatedPerson']
+                    user_identifier = associatedPerson.get('viaLogin') or associatedPerson.get('name')
+                    computer_dictionary['associatedPerson'] = user_identifier
             # Checks to see if there is an encryption status
             if 'encryption' in all_computers.keys():
                 # I don't think this is the best code.
@@ -401,13 +449,11 @@ def get_all_computers(sub_estate_token, url, sub_estate_name, alerts_url):
                     volume_returned = encryption_status[0]
                     computer_dictionary['encryption'] = (encryption_status[0]['status'])
                 except IndexError:
-                    computer_dictionary['encryption'] = 'Unknown'
+                    computer_dictionary['encryption'] = 'Status Unknown'
             # Checks to see if the machine is in a group
             if 'group' in all_computers.keys():
                 computer_dictionary['group'] = all_computers['group']['name']
             # Checks if capabilities returns more than nothing
-
-            # if len(all_computers['capabilities']) != 0: - old code
             if 'capabilities' in all_computers.keys():
                 computer_dictionary['capabilities'] = all_computers['capabilities']
             # Get installed products
@@ -593,12 +639,17 @@ def get_all_computers(sub_estate_token, url, sub_estate_name, alerts_url):
 
 
 def get_days_since_last_seen(report_date):
-    # https://www.programiz.com/python-programming/datetime/strptime
-    # Converts report_date from a string into a DataTime
-    convert_last_seen_to_a_date = datetime.strptime(report_date, "%Y-%m-%dT%H:%M:%S.%f%z")
-    # Remove the time from convert_last_seen_to_a_date
-    convert_last_seen_to_a_date = datetime.date(convert_last_seen_to_a_date)
-    # Converts date to days
+    try:
+        dt = datetime.strptime(report_date, "%Y-%m-%dT%H:%M:%S.%f%z")
+    except ValueError:
+        dt = datetime.strptime(report_date, "%Y-%m-%dT%H:%M:%S%z")
+
+    # Remove microseconds and convert to datew
+    convert_last_seen_to_a_date = dt.replace(microsecond=0).date()
+
+    # Today's date in UTC to match the timezone of the report date
+    today = datetime.now(timezone.utc).date()
+
     days = (today - convert_last_seen_to_a_date).days
     return days
 
@@ -714,7 +765,7 @@ def report_field_names():
                            'Sophos Update Cache',
                            'Sophos Message Relay Service',
                            'Sophos Data Recorder',
-                           # Mac service list
+                           # Mac process list
                            'SophosHeartbeatD',
                            'SophosDeviceControlD',
                            'SophosLiveQuery',
@@ -734,6 +785,7 @@ def report_field_names():
                            'SophosMcsAgentD',
                            'SophosCBR',
                            'SophosModernWebIntelligence',
+                           'Sophos Modern Web Intelligence',
                            'SophosWebIntelligence',
                            'SophosEncryptionD',
                            'SophosMDR',
@@ -745,14 +797,30 @@ def report_field_names():
                            'ServiceManager',
                            'InterCheck',
                            'SophosWebNetworkExtension',
+                           # Mac processes with spaces
+                           'Sophos Updater',
+                           'Sophos Encryption Central Adapter',
+                           'Sophos Event Monitor',
+                           'Sophos Live Query',
+                           'Sophos Live Response',
+                           'Sophos Web Intelligence',
+                           'Sophos Encryption',
+                           'Sophos Health',
+                           'Sophos CBR',
+                           'Sophos Scan',
+                           'Sophos Config',
+                           'Sophos CryptoGuard',
+                           'Sophos Device Control',
                            # Linux
                            'Update Scheduler',
                            'Sophos Linux AntiVirus',
+                           'Sophos Linux Runtime Detections',
+                           'Sophos Linux Device Isolation',
                            # End of services
                            'Tamper Enabled',
                            'No. High Alerts',
                            'No. Medium Alerts',
-                           'Capabilities',
+                            # 'Capabilities',
                            'Group',
                            'Core Agent',
                            'Core Agent Version',
@@ -826,7 +894,7 @@ def report_field_names():
                            'Sophos Update Cache',
                            'Sophos Message Relay Service',
                            'Sophos Data Recorder',
-                           # Mac service list
+                           # Mac processes list
                            'SophosHeartbeatD',
                            'SophosDeviceControlD',
                            'SophosLiveQuery',
@@ -846,6 +914,7 @@ def report_field_names():
                            'SophosMcsAgentD',
                            'SophosCBR',
                            'SophosModernWebIntelligence',
+                           'Sophos Modern Web Intelligence',
                            'SophosWebIntelligence',
                            'SophosEncryptionD',
                            'SophosMDR',
@@ -857,14 +926,30 @@ def report_field_names():
                            'ServiceManager',
                            'InterCheck',
                            'SophosWebNetworkExtension',
+                           # Mac processes with spaces
+                           'Sophos Updater',
+                           'Sophos Encryption Central Adapter',
+                           'Sophos Event Monitor',
+                           'Sophos Live Query',
+                           'Sophos Live Response',
+                           'Sophos Web Intelligence',
+                           'Sophos Encryption',
+                           'Sophos Health',
+                           'Sophos CBR',
+                           'Sophos Scan',
+                           'Sophos Config',
+                           'Sophos CryptoGuard',
+                           'Sophos Device Control',
                            # Linux
                            'Update Scheduler',
                            'Sophos Linux AntiVirus',
+                           'Sophos Linux Runtime Detections',
+                           'Sophos Linux Device Isolation',
                            # End of services
                            'tamperProtectionEnabled',
                            'number_high_alerts',
                            'number_medium_alerts',
-                           'capabilities',
+                           # 'capabilities',
                            'group',
                            'coreAgent',
                            'v_coreAgent',
@@ -917,13 +1002,14 @@ def get_aap_status(computer_id, url):
         aap_expires = ""
         aap_active = "AAP API not supported"
     return aap_active, aap_activated_by,aap_last_updated,aap_expires
+
 def get_machine_alerts(computer_id, hostname, sub_estate_name):
     # Makes two lists of store the alert descriptions
     list_of_computer_medium_alerts = []
     list_of_computer_high_alerts = []
     # This line allows you to debug on a certain computer. Add the debug machine at the top
     if hostname == debug_machine:
-        print(f'Put breakpoint here - Debug Machine - {hostname}')
+        print(f'Put breakpoint here - Debug Machine - {hostname}') # Put break point here
     # Sets the alert count to zero
     medium_alert_count = 0
     high_alert_count = 0
