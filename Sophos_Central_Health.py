@@ -20,7 +20,7 @@
 #
 # By: Michael Curtis and Robert Prechtel
 # Date: 29/5/2020
-# Version v2025.23
+# Version v2025.24
 # README: This script is an unsupported solution provided by Sophos Professional Services
 
 import requests
@@ -366,6 +366,8 @@ def get_all_computers(sub_estate_token, url, sub_estate_name, alerts_url):
                 service_status = services.get('status')
                 if service_status:
                     computer_dictionary['service_health'] = service_status
+                else:
+                    computer_dictionary['service_health'] = "Unknown"
 
                 # Safe check for serviceDetails
                 service_details = services.get('serviceDetails')
@@ -388,10 +390,10 @@ def get_all_computers(sub_estate_token, url, sub_estate_name, alerts_url):
                                 if service_name == "SophosWebNetworkExtension":
                                     print('Add breakpoint here')
                     else:
-                        computer_dictionary['service_health'] = 'Investigate' # service_health key is missing
+                        computer_dictionary['service_health'] = 'Unknown' # service_health key is missing
 
                 # Handle threats
-                computer_dictionary['threats'] = threats.get('status', 'Investigate')
+                computer_dictionary['threats'] = threats.get('status', 'Unknown')
 
                 # Overwrite health with overall status
                 computer_dictionary['health'] = health.get('overall')
