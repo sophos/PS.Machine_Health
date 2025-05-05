@@ -142,7 +142,7 @@ list_of_high_alerts = []
 list_of_medium_alerts = []
 # Put the machine name here to break on this machine
 # debug_machine = 'MacBook Pro'
-debug_machine = 'CO-C043107'
+debug_machine = 'mc-nuc-winxi'
 # Put the machine name here to break on this machine
 debug_sub_estate = 'put debug sub estate here'
 # Time the script started. Used to renew token when required
