@@ -5,6 +5,10 @@ This script replaces the previous scripts Endpoint_Health_EDB_MSP and Endpoint_H
 Alerts have also been added to the report
 The config file allows other data to be added to the report as required
 
+v2025.26
+Added token check on authentication
+Added Mac serial number to the report
+
 v2025.24
 Changed Investigate to Unkown. This means the key was missing in the API requested data
 Fixed an issue that would cause a crash if the service health was missing and you were not listing all the services.
