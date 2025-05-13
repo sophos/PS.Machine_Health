@@ -20,12 +20,13 @@
 #
 # By: Michael Curtis and Robert Prechtel
 # Date: 29/5/2020
-# Version v2025.24
+# Version v2025.26
 # README: This script is an unsupported solution provided by Sophos Professional Services
 
 import requests
 import csv
 import configparser
+import sys
 # Import OS to allow to check which OS the script is being run on
 import os
 # Import datetime modules
@@ -171,6 +172,9 @@ def get_bearer_token(client, secret, url):
     }
     request_token = requests.post(url, auth=(client, secret), data=d)
     json_token = request_token.json()
+    if request_token.status_code != 200:
+        print(f"{bcolours.FAIL}Failed to get token. Check you API keys and network connection to Sophos Central: Code {request_token.status_code}{bcolours.ENDC}")
+        sys.exit(1)
     headers = {'Authorization': f"Bearer {json_token['access_token']}"}
     return headers
 
@@ -440,6 +444,12 @@ def get_all_computers(sub_estate_token, url, sub_estate_name, alerts_url):
                     associatedPerson = computer_dictionary['associatedPerson']
                     user_identifier = associatedPerson.get('viaLogin') or associatedPerson.get('name')
                     computer_dictionary['associatedPerson'] = user_identifier
+            # Add machine serial number if present
+            try:
+                    all_computers['serialNumber']
+                    computer_dictionary['Serial Number'] = all_computers['serialNumber']
+            except KeyError:
+                    computer_dictionary['Serial Number'] = ''
             # Checks to see if there is an encryption status
             if 'encryption' in all_computers.keys():
                 # I don't think this is the best code.
@@ -722,6 +732,7 @@ def report_field_names():
                            'InstanceID',
                            'OS',
                            'Windows Build',
+                           'Serial Number',
                            'Encrypted Status',
                            'Last Seen Date',
                            'Days Since Last Seen',
@@ -851,6 +862,7 @@ def report_field_names():
                            'instanceid',
                            'os',
                            'windows_build',
+                           'Serial Number',
                            'encryption',
                            'lastSeenAt',
                            'Last_Seen',
