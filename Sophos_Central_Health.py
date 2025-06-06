@@ -20,7 +20,7 @@
 #
 # By: Michael Curtis and Robert Prechtel
 # Date: 29/5/2020
-# Version v2025.26
+# Version v2025.28
 # README: This script is an unsupported solution provided by Sophos Professional Services
 
 import requests
@@ -34,6 +34,8 @@ from datetime import date
 from datetime import datetime
 from datetime import timedelta
 from datetime import timezone
+# Import Randon for the retry code
+import random
 # Import time to handle API request limits
 import time
 # Import getpass for Client Secret
@@ -280,32 +282,62 @@ def get_all_computers(sub_estate_token, url, sub_estate_name, alerts_url):
             start_time = time.time()
         # Request all Computers
         # Counters to handle API request limits
+        # retry_counter = 0
+        # retry_delay = 5
+        # retry_max = 10
+        # request_computers = requests.get(computers_url, headers=headers)
+        # while request_computers.status_code == 429:
+        #     request_computers = requests.get(computers_url, headers=headers)
+        #     print(f" -> Get_All_Computers GET (already found computers={machines_in_sub_estate}) "
+        #           f"result: {request_computers.status_code}")
+        #     if request_computers.status_code == 200:
+        #         break
+        #     if request_computers.status_code != 429:
+        #         print(f" -> ERROR {request_computers.status_code} {request_computers.reason} -> ABORT")
+        #         error_occurred = True
+        #         return
+        #     retry_counter = retry_counter + 1
+        #     if retry_counter > retry_max:
+        #         print(
+        #             f" -> ERROR {request_computers.status_code} {request_computers.reason} -> "
+        #             f"Maximum retries ({retry_max}) reached. -> ABORT")
+        #         error_occurred = True
+        #         return
+        #     print(
+        #         f" -> ERROR {request_computers.status_code} {request_computers.reason} -> "
+        #         f"Wait {retry_delay} seconds and do {retry_counter}. retry")
+        #     time.sleep(retry_delay)
+        # Retry configuration
         retry_counter = 0
-        retry_delay = 5
         retry_max = 10
-        request_computers = requests.get(computers_url, headers=headers)
-        while request_computers.status_code == 429:
+        base = 1  # Base backoff time in seconds
+        cap = 30  # Max backoff time in seconds
+
+        while True:
             request_computers = requests.get(computers_url, headers=headers)
-            print(f" -> Get_All_Computers GET (already found computers={machines_in_sub_estate}) "
-                  f"result: {request_computers.status_code}")
-            if request_computers.status_code == 200:
+            status = request_computers.status_code
+            # Convert to JSON
+            computers_json = request_computers.json()
+            if status == 200:
+                print(f"{bcolours.OKBLUE} -> Get All Computers.{bcolours.ENDC} {bcolours.OKGREEN}Status Code: {status}{bcolours.ENDC}")
                 break
-            if request_computers.status_code != 429:
-                print(f" -> ERROR {request_computers.status_code} {request_computers.reason} -> ABORT")
+            if status not in (429, 500):
+                print(f" -> {bcolours.FAIL}ERROR {status} {request_alerts.reason} -> ABORT{bcolours.ENDC}")
                 error_occurred = True
                 return
-            # status_code == 429 - do retry after X seconds till max retry amount reached
-            retry_counter = retry_counter + 1
+            retry_counter += 1
             if retry_counter > retry_max:
                 print(
-                    f" -> ERROR {request_computers.status_code} {request_computers.reason} -> "
-                    f"Maximum retries ({retry_max}) reached. -> ABORT")
+                    f" -> {bcolours.FAIL}ERROR {status} {request_alerts.reason} -> Maximum retries ({retry_max}) reached. -> ABORT{bcolours.ENDC}")
                 error_occurred = True
                 return
+            # Exponential backoff with jitter
+            max_delay = min(cap, base * (2 ** retry_counter))
+            delay = random.uniform(0, max_delay)
+
             print(
-                f" -> ERROR {request_computers.status_code} {request_computers.reason} -> "
-                f"Wait {retry_delay} seconds and do {retry_counter}. retry")
-            time.sleep(retry_delay)
+                f" -> {bcolours.FAIL}ERROR {status} {request_alerts.reason} -> Waiting {delay:.2f} seconds (attempt {retry_counter}){bcolours.ENDC}")
+            time.sleep(delay)
         if request_computers.status_code == 400:
             print(request_computers.status_code)
         if request_computers.status_code == 403:
@@ -314,8 +346,7 @@ def get_all_computers(sub_estate_token, url, sub_estate_name, alerts_url):
             computer_dictionary = {'hostname': 'No access', 'Sub Estate': sub_estate_name}
             computer_list.append(computer_dictionary)
             break
-        # Convert to JSON
-        computers_json = request_computers.json()
+
         # Set the keys you want in the list
         computer_keys = ('id',
                          'hostname',
@@ -331,6 +362,8 @@ def get_all_computers(sub_estate_token, url, sub_estate_name, alerts_url):
                          'majorVersion',
                          'type',
                          )
+        if request_computers.status_code != 200:
+            print()
         # Add the computers to the computers list
         for all_computers in computers_json["items"]:
             works = 0
@@ -341,7 +374,7 @@ def get_all_computers(sub_estate_token, url, sub_estate_name, alerts_url):
                 computer_dictionary['hostname'] = 'Unknown'
                 continue
             # If a machine fails, uncomment the line below to print machine names
-            print(f"Checking computer name: {bcolours.OKBLUE}{computer_dictionary['hostname']}{bcolours.ENDC} - {request_computers.status_code}")
+            # print(f"Checking computer name: {bcolours.OKGREEN}{computer_dictionary['hostname']}{bcolours.ENDC} - {request_computers.status_code}")
             # This line allows you to debug on a certain computer. Add computer name
             if debug_machine in computer_dictionary['hostname']:
                 print('Add breakpoint here')
@@ -451,8 +484,8 @@ def get_all_computers(sub_estate_token, url, sub_estate_name, alerts_url):
             except KeyError:
                     computer_dictionary['Serial Number'] = ''
             # Checks to see if there is an encryption status
-            if 'encryption' in all_computers.keys():
-                # I don't think this is the best code.
+            try:
+                all_computers['encryption']
                 # The encryption status is a dictionary, with a list, another dictionary, then the status
                 # At present this just reports one drive. The first one in the list. 0
                 encryption_status = all_computers['encryption']['volumes']
@@ -461,6 +494,8 @@ def get_all_computers(sub_estate_token, url, sub_estate_name, alerts_url):
                     volume_returned = encryption_status[0]
                     computer_dictionary['encryption'] = (encryption_status[0]['status'])
                 except IndexError:
+                    computer_dictionary['encryption'] = 'Status Unknown'
+            except KeyError:
                     computer_dictionary['encryption'] = 'Status Unknown'
             # Checks to see if the machine is in a group
             if 'group' in all_computers.keys():
@@ -646,7 +681,7 @@ def get_all_computers(sub_estate_token, url, sub_estate_name, alerts_url):
         computer_dictionary = {'hostname': 'Empty sub estate', 'Sub Estate': sub_estate_name}
         computer_list.append(computer_dictionary)
     # print(url)
-    print(f'Checked sub estate - {sub_estate_name}. Machines in sub estate {machines_in_sub_estate}')
+    print(f'{bcolours.OKBLUE}Checked sub estate - {sub_estate_name}{bcolours.ENDC}. Machines in sub estate {bcolours.WARNING}{machines_in_sub_estate}{bcolours.ENDC}')
     return machines_in_sub_estate
 
 
@@ -1043,7 +1078,7 @@ def get_machine_alerts(computer_id, hostname, sub_estate_name):
             f'{high_alert_count}. {bcolours.WARNING}Medium Alerts Found -  {medium_alert_count}{bcolours.ENDC}')
     else:
         print(
-        f'Finding alerts for machine:{hostname} - {computer_id} in {sub_estate_name}. High Alerts Found -  '
+        f'Finding alerts for machine:{bcolours.OKGREEN}{hostname}{bcolours.ENDC} - {computer_id} in {bcolours.OKBLUE}{sub_estate_name}{bcolours.ENDC}. High Alerts Found -  '
         f'{high_alert_count}. Medium Alerts Found -  {medium_alert_count}')
     # This line allows you to debug on a certain computer. Add computer name
     if hostname == debug_machine:
@@ -1077,12 +1112,39 @@ def get_all_alerts(tenant_token, url, sub_estate_name):
         tenant_id = tenant_token
         # Add X-Tenant-ID to the headers dictionary
         headers['X-Tenant-ID'] = tenant_id
-        # Request all Computers
-        request_computers = requests.get(alert_search_url, headers=headers)
-        # Convert to JSON
-        alerts_json = request_computers.json()
-        if request_computers.status_code == 403:
-            break
+
+        # Retry configuration
+        retry_counter = 0
+        retry_max = 10
+        base = 1  # Base backoff time in seconds
+        cap = 30  # Max backoff time in seconds
+
+        while True:
+            # Request all alerts
+            request_alerts = requests.get(alert_search_url, headers=headers)
+            status = request_alerts.status_code
+            #Convert to JSON
+            alerts_json = request_alerts.json()
+            if status == 200:
+                print(f"{bcolours.OKBLUE} -> Get All Alerts. Status Code: {status}{bcolours.ENDC}")
+                break
+            if status not in (429, 500):
+                print(f" -> {bcolours.FAIL}ERROR {status} {request_alerts.reason} -> ABORT{bcolours.ENDC}")
+                error_occurred = True
+                return
+            retry_counter += 1
+            if retry_counter > retry_max:
+                print(f" -> {bcolours.FAIL}ERROR {status} {request_alerts.reason} -> Maximum retries ({retry_max}) reached. -> ABORT{bcolours.ENDC}")
+                error_occurred = True
+                return
+            # Exponential backoff with jitter
+            max_delay = min(cap, base * (2 ** retry_counter))
+            delay = random.uniform(0, max_delay)
+
+            print(
+                f" -> {bcolours.FAIL}ERROR {status} {request_alerts.reason} -> Waiting {delay:.2f} seconds (attempt {retry_counter}){bcolours.ENDC}")
+            time.sleep(delay)
+
         # Debug - Put the sub estate name you want to debug in the line below
         if sub_estate_name == debug_sub_estate:
             print(f'Put breakpoint here - sub estate - {sub_estate_name}')
@@ -1222,7 +1284,7 @@ if organization_type != "tenant":
                 print(sub_estate['showAs'])
             # Change the report name to the sub estate name
             report_name = f"{sub_estate['showAs']}{'_'}"
-            print(f"Printing sub estate - {report_name}")
+            print(f"{bcolours.OKBLUE}Printing sub estate{bcolours.ENDC} - {bcolours.OKGREEN}{report_name}{bcolours.ENDC}")
             print_report()
             # Reset report columns ready for next report
             report_column_names, report_column_order = report_field_names()
