@@ -5,6 +5,11 @@ This script replaces the previous scripts Endpoint_Health_EDB_MSP and Endpoint_H
 Alerts have also been added to the report
 The config file allows other data to be added to the report as required
 
+v2025.28
+Re-wrote the retry code
+Fixed an issue that would cause a crash if the volumes key was not present
+Added code to retry if the API returns a 500 error.
+
 v2025.26
 Added token check on authentication
 Added Mac serial number to the report
