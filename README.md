@@ -5,6 +5,11 @@ This script replaces the previous scripts Endpoint_Health_EDB_MSP and Endpoint_H
 Alerts have also been added to the report
 The config file allows other data to be added to the report as required
 
+v2025.6
+Fixed an issue where all machines may not be returned
+Added Last OS Update Time with Days
+Added OS marketing name ie, 24H2, macOS Sequoia etc
+
 v2025.28
 Re-wrote the retry code
 Fixed an issue that would cause a crash if the volumes key was not present
