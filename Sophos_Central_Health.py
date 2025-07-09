@@ -20,7 +20,7 @@
 #
 # By: Michael Curtis and Robert Prechtel
 # Date: 29/5/2020
-# Version v2025.28
+# Version v2025.6
 # README: This script is an unsupported solution provided by Sophos Professional Services
 
 import requests
@@ -52,6 +52,33 @@ sub_estate_list = []
 computer_list = []
 # Count the number of total machines across all sub estates
 total_machines = 0
+# List of OS Builds and there public names
+os_name_version = {
+    # macOS
+    "11": "Big Sur",
+    "12": "Monterey",
+    "13": "Ventura",
+    "14": "Sonoma",
+    "15": "Sequoia",
+    "26": "Tahoe",
+    # Windows 10
+    "18362": "19H1",
+    "18363": "19H2",
+    "19041": "20H1",
+    "19042": "20H2",
+    "19043": "21H1",
+    "19044": "21H2",
+    "19045": "22H2",
+    # Windows 11
+    "22000": "21H2",
+    "22621": "22H2",
+    "22631": "23H2",
+    "26100": "24H2", # Server 2025
+    # Server
+    "14393": "Redstone Server", # Server 2016
+    "17763": "Redstone 5 Server", # Server 2019
+    "20348": "21H2", # Server 2022
+}
 # Complete list of services. Used to remove columns when not required for the report
 services_list = ['Sophos AutoUpdate Service',
                  'HitmanPro.Alert service',
@@ -257,7 +284,8 @@ def get_all_computers(sub_estate_token, url, sub_estate_name, alerts_url):
     # Store the base URL before it is changed to get all the computers
     # Comes in useful for other queries, for example AAP
     base_url = url
-    url = f"{url}{'/endpoints?pageSize='}{pagesize}{'&view=full'}"
+    # url = f"{url}{'/endpoints?pageSize='}{pagesize}{'&view=full'}"
+    url = f"{url}{'/endpoints?pageSize='}{pagesize}{'&sort=id:desc'}{'&view=full'}"
     computers_url = url
     # Loop while the page_count is not equal to 0. We have more computers to query
     page_count = 1
@@ -280,6 +308,8 @@ def get_all_computers(sub_estate_token, url, sub_estate_name, alerts_url):
             headers['X-Tenant-ID'] = sub_estate_token
             # print(f"New Header - {headers}")
             start_time = time.time()
+        #Old retry Code. Leaving it here just in case we need it again
+
         # Request all Computers
         # Counters to handle API request limits
         # retry_counter = 0
@@ -308,6 +338,7 @@ def get_all_computers(sub_estate_token, url, sub_estate_name, alerts_url):
         #         f"Wait {retry_delay} seconds and do {retry_counter}. retry")
         #     time.sleep(retry_delay)
         # Retry configuration
+
         retry_counter = 0
         retry_max = 10
         base = 1  # Base backoff time in seconds
@@ -372,6 +403,7 @@ def get_all_computers(sub_estate_token, url, sub_estate_name, alerts_url):
             # If no hostname is returned add unknown
             if 'hostname' not in computer_dictionary.keys():
                 computer_dictionary['hostname'] = 'Unknown'
+                computer_dictionary['hostname'] = 'Unknown'
                 continue
             # If a machine fails, uncomment the line below to print machine names
             # print(f"Checking computer name: {bcolours.OKGREEN}{computer_dictionary['hostname']}{bcolours.ENDC} - {request_computers.status_code}")
@@ -391,7 +423,13 @@ def get_all_computers(sub_estate_token, url, sub_estate_name, alerts_url):
                 computer_dictionary['Machine_URL'] = 'N/A'
                 computer_list.append(computer_dictionary)
                 continue
-
+            try:
+                all_computers['lastOsUpdateAt']
+                computer_dictionary['last_Os_Update_At'] = all_computers['lastOsUpdateAt']
+                computer_dictionary['last_update_days'] = get_days_since_last_seen(all_computers['lastOsUpdateAt'])
+            except KeyError:
+                computer_dictionary['last_Os_Update_At'] = ''
+                computer_dictionary['last_update_days'] = ''
             # Check if 'health' exists in the dictionary
             if 'health' in computer_dictionary:
 
@@ -441,6 +479,9 @@ def get_all_computers(sub_estate_token, url, sub_estate_name, alerts_url):
                 # If so make the OS key equal the Mac version else return the platform name for Windows and Linx
                 if 'os' in computer_dictionary.keys():
                     if 'macOS' in computer_dictionary['os']['platform']:
+                        # Look up the OS version from the os_version dictionary
+                        os_build = str(computer_dictionary['os']['majorVersion'])
+                        computer_dictionary['os_version'] = os_name_version.get(os_build, "")
                         computer_dictionary['os'] = str(computer_dictionary['os']['platform']) + ' ' + str(
                             computer_dictionary['os']['majorVersion']) + '.' + str(
                             # computer_dictionary['os']['minorVersion']) + '.' + str(computer_dictionary['os']['build'])
@@ -449,7 +490,11 @@ def get_all_computers(sub_estate_token, url, sub_estate_name, alerts_url):
                         # Add the build number if the OS is Windows and build number exists
                         # Checks the os name is returned. If not add unknown
                         try:
+
                             computer_dictionary['os']['name']
+                            # Look up the OS version from the os_version dictionary
+                            os_build = str(computer_dictionary['os']['build'])
+                            computer_dictionary['os_version'] = os_name_version.get(os_build, "")
                             if 'windows' in computer_dictionary['os']['platform'] and 'build' in \
                                     computer_dictionary['os'] and windows_build_version == 1:
                                 computer_dictionary['windows_build'] = (computer_dictionary['os']['build'])
@@ -766,11 +811,14 @@ def report_field_names():
                            'Cloud Provider',
                            'InstanceID',
                            'OS',
-                           'Windows Build',
+                           'OS Build',
+                           "OS Version",
                            'Serial Number',
                            'Encrypted Status',
                            'Last Seen Date',
                            'Days Since Last Seen',
+                           'Last OS Update',
+                           'Days Since OS Last Update',
                            'AAP Status',
                            'AAP Activated By',
                            'AAP Last Updated',
@@ -897,10 +945,13 @@ def report_field_names():
                            'instanceid',
                            'os',
                            'windows_build',
+                           'os_version',
                            'Serial Number',
                            'encryption',
                            'lastSeenAt',
                            'Last_Seen',
+                           'last_Os_Update_At',
+                           'last_update_days',
                            'AAP_Active',
                            'AAP_Activated_By',
                            'AAP_Last_Updated',
