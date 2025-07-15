@@ -20,7 +20,7 @@
 #
 # By: Michael Curtis and Robert Prechtel
 # Date: 29/5/2020
-# Version v2025.6
+# Version v2025.71
 # README: This script is an unsupported solution provided by Sophos Professional Services
 
 import requests
@@ -353,13 +353,13 @@ def get_all_computers(sub_estate_token, url, sub_estate_name, alerts_url):
                 print(f"{bcolours.OKBLUE} -> Get All Computers.{bcolours.ENDC} {bcolours.OKGREEN}Status Code: {status}{bcolours.ENDC}")
                 break
             if status not in (429, 500):
-                print(f" -> {bcolours.FAIL}ERROR {status} {request_alerts.reason} -> ABORT{bcolours.ENDC}")
+                print(f" -> {bcolours.FAIL}ERROR {status} {request_computers.reason} -> ABORT{bcolours.ENDC}")
                 error_occurred = True
                 return
             retry_counter += 1
             if retry_counter > retry_max:
                 print(
-                    f" -> {bcolours.FAIL}ERROR {status} {request_alerts.reason} -> Maximum retries ({retry_max}) reached. -> ABORT{bcolours.ENDC}")
+                    f" -> {bcolours.FAIL}ERROR {status} {request_computers.reason} -> Maximum retries ({retry_max}) reached. -> ABORT{bcolours.ENDC}")
                 error_occurred = True
                 return
             # Exponential backoff with jitter
@@ -367,7 +367,7 @@ def get_all_computers(sub_estate_token, url, sub_estate_name, alerts_url):
             delay = random.uniform(0, max_delay)
 
             print(
-                f" -> {bcolours.FAIL}ERROR {status} {request_alerts.reason} -> Waiting {delay:.2f} seconds (attempt {retry_counter}){bcolours.ENDC}")
+                f" -> {bcolours.FAIL}ERROR {status} {request_computers.reason} -> Waiting {delay:.2f} seconds (attempt {retry_counter}){bcolours.ENDC}")
             time.sleep(delay)
         if request_computers.status_code == 400:
             print(request_computers.status_code)
