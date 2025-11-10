@@ -20,7 +20,7 @@
 #
 # By: Michael Curtis and Robert Prechtel
 # Date: 29/5/2020
-# Version v2025.71
+# Version v2025.11.1
 # README: This script is an unsupported solution provided by Sophos Professional Services
 
 import requests
@@ -74,6 +74,7 @@ os_name_version = {
     "22621": "22H2",
     "22631": "23H2",
     "26100": "24H2", # Server 2025
+    "26200": "25H2",
     # Server
     "14393": "Redstone Server", # Server 2016
     "17763": "Redstone 5 Server", # Server 2019
@@ -131,6 +132,7 @@ services_list = ['Sophos AutoUpdate Service',
                  'SophosAutoUpdate',
                  'SophosUpdater',
                  'SophosSXLD',
+                 'Sophos SXL',
                  'SophosMcsAgentD',
                  'SophosCBR',
                  'SophosModernWebIntelligence',
@@ -139,7 +141,9 @@ services_list = ['Sophos AutoUpdate Service',
                  'SophosEncryptionD',
                  'SophosMDR',
                  'SophosEventMonitorLegacy',
+                 'Sophos Event Monitor (Legacy)',
                  'SophosCryptoGuardLegacy',
+                 'Sophos CryptoGuard (Legacy)',
                  'SophosWebIntelligenceLegacy',
                  'SophosScanDLegacy',
                  'SophosLiveResponse',
@@ -153,6 +157,7 @@ services_list = ['Sophos AutoUpdate Service',
                  'Sophos Live Query',
                  'Sophos Live Response',
                  'Sophos Web Intelligence',
+                 'Sophos Web Intelligence (Legacy)',
                  'Sophos Encryption',
                  'Sophos Health',
                  'Sophos CBR',
@@ -172,7 +177,7 @@ list_of_high_alerts = []
 list_of_medium_alerts = []
 # Put the machine name here to break on this machine
 # debug_machine = 'MacBook Pro'
-debug_machine = 'mc-nuc-winxi'
+debug_machine = 'debug'
 # Put the machine name here to break on this machine
 debug_sub_estate = 'put debug sub estate here'
 # Time the script started. Used to renew token when required
@@ -308,36 +313,6 @@ def get_all_computers(sub_estate_token, url, sub_estate_name, alerts_url):
             headers['X-Tenant-ID'] = sub_estate_token
             # print(f"New Header - {headers}")
             start_time = time.time()
-        #Old retry Code. Leaving it here just in case we need it again
-
-        # Request all Computers
-        # Counters to handle API request limits
-        # retry_counter = 0
-        # retry_delay = 5
-        # retry_max = 10
-        # request_computers = requests.get(computers_url, headers=headers)
-        # while request_computers.status_code == 429:
-        #     request_computers = requests.get(computers_url, headers=headers)
-        #     print(f" -> Get_All_Computers GET (already found computers={machines_in_sub_estate}) "
-        #           f"result: {request_computers.status_code}")
-        #     if request_computers.status_code == 200:
-        #         break
-        #     if request_computers.status_code != 429:
-        #         print(f" -> ERROR {request_computers.status_code} {request_computers.reason} -> ABORT")
-        #         error_occurred = True
-        #         return
-        #     retry_counter = retry_counter + 1
-        #     if retry_counter > retry_max:
-        #         print(
-        #             f" -> ERROR {request_computers.status_code} {request_computers.reason} -> "
-        #             f"Maximum retries ({retry_max}) reached. -> ABORT")
-        #         error_occurred = True
-        #         return
-        #     print(
-        #         f" -> ERROR {request_computers.status_code} {request_computers.reason} -> "
-        #         f"Wait {retry_delay} seconds and do {retry_counter}. retry")
-        #     time.sleep(retry_delay)
-        # Retry configuration
 
         retry_counter = 0
         retry_max = 10
@@ -352,7 +327,19 @@ def get_all_computers(sub_estate_token, url, sub_estate_name, alerts_url):
             if status == 200:
                 print(f"{bcolours.OKBLUE} -> Get All Computers.{bcolours.ENDC} {bcolours.OKGREEN}Status Code: {status}{bcolours.ENDC}")
                 break
-            if status not in (429, 500):
+            if request_computers.status_code == 400:
+                print(request_computers.status_code)
+                # Making a dictionary as we have a 400 error
+                computer_dictionary = {'hostname': 'Error Code 400', 'Sub Estate': sub_estate_name}
+                computer_list.append(computer_dictionary)
+                return machines_in_sub_estate
+            if request_computers.status_code == 403:
+                print(f"No access to sub estate - {sub_estate_name}. Status Code - {request_computers.status_code}")
+                # Making a dictionary as we have no access to this sub estate
+                computer_dictionary = {'hostname': 'No access (Error Code (403)', 'Sub Estate': sub_estate_name}
+                computer_list.append(computer_dictionary)
+                return machines_in_sub_estate
+            if status not in (429, 500, 504):
                 print(f" -> {bcolours.FAIL}ERROR {status} {request_computers.reason} -> ABORT{bcolours.ENDC}")
                 error_occurred = True
                 return
@@ -369,14 +356,6 @@ def get_all_computers(sub_estate_token, url, sub_estate_name, alerts_url):
             print(
                 f" -> {bcolours.FAIL}ERROR {status} {request_computers.reason} -> Waiting {delay:.2f} seconds (attempt {retry_counter}){bcolours.ENDC}")
             time.sleep(delay)
-        if request_computers.status_code == 400:
-            print(request_computers.status_code)
-        if request_computers.status_code == 403:
-            print(f"No access to sub estate - {sub_estate_name}. Status Code - {request_computers.status_code}")
-            # Making a dictionary as we have no access to this sub estate
-            computer_dictionary = {'hostname': 'No access', 'Sub Estate': sub_estate_name}
-            computer_list.append(computer_dictionary)
-            break
 
         # Set the keys you want in the list
         computer_keys = ('id',
@@ -430,6 +409,13 @@ def get_all_computers(sub_estate_token, url, sub_estate_name, alerts_url):
             except KeyError:
                 computer_dictionary['last_Os_Update_At'] = ''
                 computer_dictionary['last_update_days'] = ''
+            try:
+                all_computers['lastAgentUpdateAt']
+                computer_dictionary['last_agent_update_at'] = all_computers['lastAgentUpdateAt']
+                computer_dictionary['last_agent_update_at_days'] = get_days_since_last_seen(all_computers['lastAgentUpdateAt'])
+            except KeyError:
+                computer_dictionary['last_agent_update_at'] = ''
+                computer_dictionary['last_agent_update_at_days'] = ''
             # Check if 'health' exists in the dictionary
             if 'health' in computer_dictionary:
 
@@ -451,7 +437,7 @@ def get_all_computers(sub_estate_token, url, sub_estate_name, alerts_url):
                     # Iterate through service details
                     for service in service_details:
                         service_name = service.get('name')
-                        if service_name == 'Sophos Modern Web Intelligence':
+                        if service_name == 'Sophos File [canner':
                             print()  # Add your logic here
 
                 # If flag is enabled, process and display full services list
@@ -462,7 +448,7 @@ def get_all_computers(sub_estate_token, url, sub_estate_name, alerts_url):
                             service_status = service.get('status')
                             if service_name and service_status:
                                 computer_dictionary[service_name] = service_status
-                                if service_name == "SophosWebNetworkExtension":
+                                if service_name == 'Sophos File [canner':
                                     print('Add breakpoint here')
                     else:
                         computer_dictionary['service_health'] = 'Unknown' # service_health key is missing
@@ -476,7 +462,7 @@ def get_all_computers(sub_estate_token, url, sub_estate_name, alerts_url):
                # Check the platform key exists
                 computer_dictionary['os']['platform']
                 # Check to see if the key value for platform returns Mac.
-                # If so make the OS key equal the Mac version else return the platform name for Windows and Linx
+                # If so make the OS key equal the Mac version else return the platform name for Windows and Linux
                 if 'os' in computer_dictionary.keys():
                     if 'macOS' in computer_dictionary['os']['platform']:
                         # Look up the OS version from the os_version dictionary
@@ -484,21 +470,22 @@ def get_all_computers(sub_estate_token, url, sub_estate_name, alerts_url):
                         computer_dictionary['os_version'] = os_name_version.get(os_build, "")
                         computer_dictionary['os'] = str(computer_dictionary['os']['platform']) + ' ' + str(
                             computer_dictionary['os']['majorVersion']) + '.' + str(
-                            # computer_dictionary['os']['minorVersion']) + '.' + str(computer_dictionary['os']['build'])
-                            computer_dictionary['os']['minorVersion'])
+                            computer_dictionary['os']['minorVersion']) + '.' + str(computer_dictionary['os']['build'])
+                            # computer_dictionary['os']['minorVersion'])
                     else:
                         # Add the build number if the OS is Windows and build number exists
                         # Checks the os name is returned. If not add unknown
                         try:
-
                             computer_dictionary['os']['name']
                             # Look up the OS version from the os_version dictionary
-                            os_build = str(computer_dictionary['os']['build'])
-                            computer_dictionary['os_version'] = os_name_version.get(os_build, "")
-                            if 'windows' in computer_dictionary['os']['platform'] and 'build' in \
+                            if 'linux' in computer_dictionary['os']['platform']:
+                                computer_dictionary['os'] = computer_dictionary['os']['name']
+                            elif 'windows' in computer_dictionary['os']['platform'] and 'build' in \
                                     computer_dictionary['os'] and windows_build_version == 1:
+                                os_build = str(computer_dictionary['os']['build'])
+                                computer_dictionary['os_version'] = os_name_version.get(os_build, "")
                                 computer_dictionary['windows_build'] = (computer_dictionary['os']['build'])
-                            computer_dictionary['os'] = computer_dictionary['os']['name']
+                            # computer_dictionary['os'] = computer_dictionary['os']['name']
                         except:
                             computer_dictionary['os'] = 'Unknown'
             except KeyError:
@@ -793,11 +780,14 @@ def read_config():
     list_machines_in_group = list_machines_in_group.split(',')
     Show_AAP_Status = config.getint('EXTRA_FIELDS', 'Show_AAP_Status')
     # Checks if the last character of the file path contains a \ or / if not add one
-    if report_file_path[-1].isalpha():
-        if os.name != "posix":
-            report_file_path = report_file_path + "\\"
-        else:
-            report_file_path = report_file_path + "/"
+    # if report_file_path[-1].isalpha():
+    #    if os.name != "posix":
+    #        report_file_path = report_file_path + "\\"
+    #    else:
+    #        report_file_path = report_file_path + "/"
+    # Checks if the last character of the file path contains a \ or / if not add one
+    if not report_file_path.endswith(('\\', '/')):
+        report_file_path = report_file_path + os.sep
     return (client_id, client_secret, report_name, report_file_path, mac_address, versions, windows_build_version,
             cloud_servers, exclude_alerts, full_services_list, split_edb_reports, include_sse_id, list_machines_with_issues_only,show_sse_menu, list_machines_in_group,Show_AAP_Status)
 
@@ -808,6 +798,8 @@ def report_field_names():
                            'Sub EstateID',
                            'Hostname',
                            'Type',
+                           'Last Agent Update',
+                           'Days Since Last Agent Update',
                            'Cloud Provider',
                            'InstanceID',
                            'OS',
@@ -826,74 +818,33 @@ def report_field_names():
                            'Health',
                            'Threats',
                            'Service Health',
+
                            # PC service list
-                           'Sophos AutoUpdate Service',
-                           'HitmanPro.Alert service',
+
+                           'Sophos MCS Agent',
                            'Sophos Endpoint Defense',
                            'Sophos Endpoint Defense Service',
                            'Sophos File Scanner',
                            'Sophos File Scanner Service',
                            'Sophos IPS',
-                           'Sophos MCS Agent',
                            'Sophos MCS Client',
                            'Sophos Network Threat Protection',
                            'Sophos System Protection Service',
                            'Sophos NetFilter',
-                           'Sophos EDR Agent',
                            'HitmanPro Alert service',
+                           'HitmanPro.Alert service',
                            'Sophos Anti-Virus',
-                           'Sophos Anti-Virus Status Reporter',
-                           'Sophos Clean Service',
+                           'Sophos AutoUpdate Service',
+                           'Sophos EDR Agent',
                            'Sophos Clean',
-                           'Sophos Device Control Service',
-                           'Sophos Device Encryption Service',
-                           'Sophos File Integrity Monitoring',
-                           'Sophos Snort',
-                           'File Detection',
                            'Sophos Heartbeat',
-                           'Sophos MCS Heartbeat',
-                           'Sophos Safestore Service',
-                           'Sophos Safestore',
-                           'Sophos Lockdown Service',
-                           'Sophos Web Control Service',
-                           'Sophos Web Intelligence Filter Service',
-                           'Sophos Web Intelligence Service',
                            'Sophos Update Cache',
                            'Sophos Message Relay Service',
-                           'Sophos Data Recorder',
+
                            # Mac process list
-                           'SophosHeartbeatD',
-                           'SophosDeviceControlD',
-                           'SophosLiveQuery',
-                           'SophosEncryptionCentralAdapter',
-                           'SophosScanD',
+
                            'Sophos Detection',
-                           'SophosConfigD',
-                           'SophosEventMonitor',
-                           'SophosHealthD',
-                           'SophosCleanD',
-                           'SophosCryptoGuard',
-                           'SophosAntiVirus',
                            'Sophos Network Extension',
-                           'SophosAutoUpdate',
-                           'SophosUpdater',
-                           'SophosSXLD',
-                           'SophosMcsAgentD',
-                           'SophosCBR',
-                           'SophosModernWebIntelligence',
-                           'Sophos Modern Web Intelligence',
-                           'SophosWebIntelligence',
-                           'SophosEncryptionD',
-                           'SophosMDR',
-                           'SophosEventMonitorLegacy',
-                           'SophosCryptoGuardLegacy',
-                           'SophosWebIntelligenceLegacy',
-                           'SophosScanDLegacy',
-                           'SophosLiveResponse',
-                           'ServiceManager',
-                           'InterCheck',
-                           'SophosWebNetworkExtension',
-                           # Mac processes with spaces
                            'Sophos Updater',
                            'Sophos Encryption Central Adapter',
                            'Sophos Event Monitor',
@@ -903,16 +854,74 @@ def report_field_names():
                            'Sophos Encryption',
                            'Sophos Health',
                            'Sophos CBR',
-                           'Sophos Scan',
                            'Sophos Config',
                            'Sophos CryptoGuard',
                            'Sophos Device Control',
+                           'Sophos Modern Web Intelligence',
+
                            # Linux
+
                            'Update Scheduler',
                            'Sophos Linux AntiVirus',
                            'Sophos Linux Runtime Detections',
                            'Sophos Linux Device Isolation',
+
+                           # Old PC Services
+
+                           'Sophos Clean Service',
+                           'Sophos Anti-Virus Status Reporter',
+                           'Sophos Device Control Service',
+                           'Sophos Device Encryption Service',
+                           'Sophos File Integrity Monitoring',
+                           'Sophos Snort',
+                           'File Detection',
+                           'Sophos MCS Heartbeat',
+                           'Sophos Safestore Service',
+                           'Sophos Safestore',
+                           'Sophos Lockdown Service',
+                           'Sophos Web Control Service',
+                           'Sophos Web Intelligence Filter Service',
+                           'Sophos Web Intelligence Service',
+                           'Sophos Data Recorder',
+
+                           # Old Mac Processes
+
+                           'SophosHeartbeatD', #?
+                           'SophosDeviceControlD', #?
+                           'SophosLiveQuery', #?
+                           'SophosEncryptionCentralAdapter', #?
+                           'SophosScanD', #?
+                           'SophosConfigD',
+                           'SophosEventMonitor',
+                           'SophosHealthD',
+                           'SophosCleanD',
+                           'SophosCryptoGuard',
+                           'SophosAntiVirus',
+                           'SophosAutoUpdate',
+                           'SophosUpdater',
+                           'SophosSXLD',
+                           'SophosMcsAgentD',
+                           'SophosCBR',
+                           'SophosModernWebIntelligence',
+                           'SophosWebIntelligence',
+                           'SophosEncryptionD',
+                           'SophosMDR',
+                           'SophosEventMonitorLegacy',
+                           'Sophos Event Monitor (Legacy)',
+                           'SophosCryptoGuardLegacy',
+                           'Sophos CryptoGuard (Legacy)',
+                           'SophosWebIntelligenceLegacy',
+                           'SophosScanDLegacy',
+                           'SophosLiveResponse',
+                           'ServiceManager',
+                           'InterCheck',
+                           'SophosWebNetworkExtension',
+                           'Sophos SXL',
+                           'Sophos Web Intelligence (Legacy)',
+                           'Sophos Scan',
+
                            # End of services
+
                            'Tamper Enabled',
                            'No. High Alerts',
                            'No. Medium Alerts',
@@ -941,6 +950,8 @@ def report_field_names():
                            'Sub EstateID',
                            'hostname',
                            'type',
+                           'last_agent_update_at',
+                           'last_agent_update_at_days',
                            'provider',
                            'instanceid',
                            'os',
@@ -959,74 +970,33 @@ def report_field_names():
                            'health',
                            'threats',
                            'service_health',
+
                            # PC service list
-                           'Sophos AutoUpdate Service',
-                           'HitmanPro.Alert service',
+
+                           'Sophos MCS Agent',
                            'Sophos Endpoint Defense',
                            'Sophos Endpoint Defense Service',
                            'Sophos File Scanner',
                            'Sophos File Scanner Service',
                            'Sophos IPS',
-                           'Sophos MCS Agent',
                            'Sophos MCS Client',
                            'Sophos Network Threat Protection',
                            'Sophos System Protection Service',
                            'Sophos NetFilter',
-                           'Sophos EDR Agent',
                            'HitmanPro Alert service',
+                           'HitmanPro.Alert service',
                            'Sophos Anti-Virus',
-                           'Sophos Anti-Virus Status Reporter',
-                           'Sophos Clean Service',
+                           'Sophos AutoUpdate Service',
+                           'Sophos EDR Agent',
                            'Sophos Clean',
-                           'Sophos Device Control Service',
-                           'Sophos Device Encryption Service',
-                           'Sophos File Integrity Monitoring',
-                           'Sophos Snort',
-                           'File Detection',
                            'Sophos Heartbeat',
-                           'Sophos MCS Heartbeat',
-                           'Sophos Safestore Service',
-                           'Sophos Safestore',
-                           'Sophos Lockdown Service',
-                           'Sophos Web Control Service',
-                           'Sophos Web Intelligence Filter Service',
-                           'Sophos Web Intelligence Service',
                            'Sophos Update Cache',
                            'Sophos Message Relay Service',
-                           'Sophos Data Recorder',
+
                            # Mac processes list
-                           'SophosHeartbeatD',
-                           'SophosDeviceControlD',
-                           'SophosLiveQuery',
-                           'SophosEncryptionCentralAdapter',
-                           'SophosScanD',
+
                            'Sophos Detection',
-                           'SophosConfigD',
-                           'SophosEventMonitor',
-                           'SophosHealthD',
-                           'SophosCleanD',
-                           'SophosCryptoGuard',
-                           'SophosAntiVirus',
                            'Sophos Network Extension',
-                           'SophosAutoUpdate',
-                           'SophosUpdater',
-                           'SophosSXLD',
-                           'SophosMcsAgentD',
-                           'SophosCBR',
-                           'SophosModernWebIntelligence',
-                           'Sophos Modern Web Intelligence',
-                           'SophosWebIntelligence',
-                           'SophosEncryptionD',
-                           'SophosMDR',
-                           'SophosEventMonitorLegacy',
-                           'SophosCryptoGuardLegacy',
-                           'SophosWebIntelligenceLegacy',
-                           'SophosScanDLegacy',
-                           'SophosLiveResponse',
-                           'ServiceManager',
-                           'InterCheck',
-                           'SophosWebNetworkExtension',
-                           # Mac processes with spaces
                            'Sophos Updater',
                            'Sophos Encryption Central Adapter',
                            'Sophos Event Monitor',
@@ -1036,15 +1006,72 @@ def report_field_names():
                            'Sophos Encryption',
                            'Sophos Health',
                            'Sophos CBR',
-                           'Sophos Scan',
                            'Sophos Config',
                            'Sophos CryptoGuard',
                            'Sophos Device Control',
+                           'Sophos Modern Web Intelligence',
+
                            # Linux
+
                            'Update Scheduler',
                            'Sophos Linux AntiVirus',
                            'Sophos Linux Runtime Detections',
                            'Sophos Linux Device Isolation',
+
+                            # Old PC Service
+
+                           'Sophos Clean Service',
+                           'Sophos Anti-Virus Status Reporter',
+                           'Sophos Device Control Service',
+                           'Sophos Device Encryption Service',
+                           'Sophos File Integrity Monitoring',
+                           'Sophos Snort',
+                           'File Detection',
+                           'Sophos MCS Heartbeat',
+                           'Sophos Safestore Service',
+                           'Sophos Safestore',
+                           'Sophos Lockdown Service',
+                           'Sophos Web Control Service',
+                           'Sophos Web Intelligence Filter Service',
+                           'Sophos Web Intelligence Service',
+                           'Sophos Data Recorder',
+
+                           # Old Mac Processes
+
+                           'SophosHeartbeatD', #?
+                           'SophosDeviceControlD', #?
+                           'SophosLiveQuery', #?
+                           'SophosEncryptionCentralAdapter', #?
+                           'SophosScanD', #?
+                           'SophosConfigD',
+                           'SophosEventMonitor',
+                           'SophosHealthD',
+                           'SophosCleanD',
+                           'SophosCryptoGuard',
+                           'SophosAntiVirus',
+                           'SophosAutoUpdate',
+                           'SophosUpdater',
+                           'SophosSXLD', #?
+                           'SophosMcsAgentD',
+                           'SophosCBR',
+                           'SophosModernWebIntelligence',
+                           'SophosWebIntelligence',
+                           'SophosEncryptionD',
+                           'SophosMDR',
+                           'SophosEventMonitorLegacy',
+                           'Sophos Event Monitor (Legacy)',
+                           'SophosCryptoGuardLegacy',
+                           'Sophos CryptoGuard (Legacy)',
+                           'SophosWebIntelligenceLegacy',
+                           'SophosScanDLegacy',
+                           'SophosLiveResponse',
+                           'ServiceManager',
+                           'InterCheck',
+                           'SophosWebNetworkExtension',
+                           'Sophos SXL',
+                           'Sophos Web Intelligence (Legacy)',
+                           'Sophos Scan',
+
                            # End of services
                            'tamperProtectionEnabled',
                            'number_high_alerts',
@@ -1179,7 +1206,7 @@ def get_all_alerts(tenant_token, url, sub_estate_name):
             if status == 200:
                 print(f"{bcolours.OKBLUE} -> Get All Alerts. Status Code: {status}{bcolours.ENDC}")
                 break
-            if status not in (429, 500):
+            if status not in (429, 500, 504):
                 print(f" -> {bcolours.FAIL}ERROR {status} {request_alerts.reason} -> ABORT{bcolours.ENDC}")
                 error_occurred = True
                 return
