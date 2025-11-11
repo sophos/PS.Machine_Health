@@ -5,6 +5,9 @@ This script replaces the previous scripts Endpoint_Health_EDB_MSP and Endpoint_H
 Alerts have also been added to the report
 The config file allows other data to be added to the report as required
 
+v2025.11.2
+Fixed an issue introdcuced in v2025.11.1 where the Windows OS was incorrectly formatted
+
 v2025.11.1
 Re-ordered the services. The modern services come first
 Fix an issue when the Linux name was not returned
