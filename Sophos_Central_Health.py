@@ -20,7 +20,7 @@
 #
 # By: Michael Curtis and Robert Prechtel
 # Date: 29/5/2020
-# Version v2025.11.1
+# Version v2025.11.2
 # README: This script is an unsupported solution provided by Sophos Professional Services
 
 import requests
@@ -480,12 +480,11 @@ def get_all_computers(sub_estate_token, url, sub_estate_name, alerts_url):
                             # Look up the OS version from the os_version dictionary
                             if 'linux' in computer_dictionary['os']['platform']:
                                 computer_dictionary['os'] = computer_dictionary['os']['name']
-                            elif 'windows' in computer_dictionary['os']['platform'] and 'build' in \
-                                    computer_dictionary['os'] and windows_build_version == 1:
+                            elif 'windows' in computer_dictionary['os']['platform'] and 'build' in computer_dictionary['os'] and windows_build_version == 1:
                                 os_build = str(computer_dictionary['os']['build'])
                                 computer_dictionary['os_version'] = os_name_version.get(os_build, "")
                                 computer_dictionary['windows_build'] = (computer_dictionary['os']['build'])
-                            # computer_dictionary['os'] = computer_dictionary['os']['name']
+                            computer_dictionary['os'] = computer_dictionary['os']['name']
                         except:
                             computer_dictionary['os'] = 'Unknown'
             except KeyError:
