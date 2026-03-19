@@ -5,6 +5,9 @@ This script replaces the previous scripts Endpoint_Health_EDB_MSP and Endpoint_H
 Alerts have also been added to the report
 The config file allows other data to be added to the report as required
 
+v2026.3.10
+Removed the MDR Installed and Version columns. These are now covered by the installation of the XDR agent. MDR is just a license upgrade and no longer has its own agent.
+
 v2025.11.2
 Fixed an issue introdcuced in v2025.11.1 where the Windows OS was incorrectly formatted
 
