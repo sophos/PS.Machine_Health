@@ -20,7 +20,7 @@
 #
 # By: Michael Curtis and Robert Prechtel
 # Date: 29/5/2020
-# Version v2025.11.2
+# Version v2026.3.10
 # README: This script is an unsupported solution provided by Sophos Professional Services
 
 import requests
@@ -75,6 +75,7 @@ os_name_version = {
     "22631": "23H2",
     "26100": "24H2", # Server 2025
     "26200": "25H2",
+    '28000': '26H1',
     # Server
     "14393": "Redstone Server", # Server 2016
     "17763": "Redstone 5 Server", # Server 2019
@@ -539,8 +540,11 @@ def get_all_computers(sub_estate_token, url, sub_estate_name, alerts_url):
             if 'assignedProducts' in all_computers.keys():
                 for products in all_computers['assignedProducts']:
                     # This loops through the product names and gets the versions. We may not add these to the report
+                    if products['code'] == 'mtr':
+                        print()
+                    # No need to report on endpointProtection or MTR. These are covered in other product codes
                     product_names = products['code']
-                    if product_names != "endpointProtection":
+                    if product_names != "endpointProtection" and product_names != "mtr":
                         computer_dictionary[product_names] = products['status']
                         product_version_name = f"v_{product_names}"
                         if products['status'] == 'installed' and versions == 1:
@@ -732,12 +736,10 @@ def get_days_since_last_seen(report_date):
     return days
 
 def make_valid_client_id(os, machine_id):
-    # Characters to be removed
-    # https://central.sophos.com/manage/server/devices/servers/b10cc611-7805-7419-e9f0-46947a4ab60e/summary
-    # https://central.sophos.com/manage/endpoint/devices/computers/60b19085-7bbf-44ff-3a67-e58a3c4e14b1/summary
     server_url = 'https://central.sophos.com/manage/server/devices/servers/'
     endpoint_url = 'https://central.sophos.com/manage/endpoint/devices/computers/'
     # Remove the - from the id
+    # Characters to be removed
     remove_characters_from_id = ['-']
     for remove_each_character in remove_characters_from_id:
         machine_id = machine_id.replace(remove_each_character, '')
@@ -924,7 +926,6 @@ def report_field_names():
                            'Tamper Enabled',
                            'No. High Alerts',
                            'No. Medium Alerts',
-                            # 'Capabilities',
                            'Group',
                            'Core Agent',
                            'Core Agent Version',
@@ -932,8 +933,8 @@ def report_field_names():
                            'Intercept X Version',
                            'Device Encryption',
                            'Device Encryption Version',
-                           'MDR',
-                           'MDR Version',
+                           # 'MDR',
+                           # 'MDR Version',
                            'XDR',
                            'XDR Version',
                            'ZTNA',
@@ -1075,7 +1076,6 @@ def report_field_names():
                            'tamperProtectionEnabled',
                            'number_high_alerts',
                            'number_medium_alerts',
-                           # 'capabilities',
                            'group',
                            'coreAgent',
                            'v_coreAgent',
@@ -1083,8 +1083,8 @@ def report_field_names():
                            'v_interceptX',
                            'deviceEncryption',
                            'v_deviceEncryption',
-                           'mtr',
-                           'v_mtr',
+                           # 'mtr',
+                           # 'v_mtr',
                            'xdr',
                            'v_xdr',
                            'ztna',
@@ -1276,14 +1276,14 @@ def print_report():
         # report_column_names.remove('Endpoint Protection Version')
         report_column_names.remove('Core Agent Version')
         report_column_names.remove('Device Encryption Version')
-        report_column_names.remove('MDR Version')
+        # report_column_names.remove('MDR Version')
         report_column_names.remove('XDR Version')
         report_column_names.remove('ZTNA Version')
         report_column_order.remove('v_interceptX')
         # report_column_order.remove('v_endpointProtection')
         report_column_order.remove('v_coreAgent')
         report_column_order.remove('v_deviceEncryption')
-        report_column_order.remove('v_mtr')
+        # report_column_order.remove('v_mtr')
         report_column_order.remove('v_xdr')
         report_column_order.remove('v_ztna')
     if windows_build_version == 0:
